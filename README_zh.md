@@ -42,7 +42,7 @@ AskFlow 将私有知识库检索、意图识别、流程路由和工单管理串
 - **Agent 系统** — 规则 + LLM 双重意图识别，配置驱动路由至 RAG / 工单 / 转人工 / 澄清追问
 - **流式聊天** — 基于 WebSocket 的实时逐字输出，支持心跳检测、取消生成、断线自动重连
 - **工单管理** — 自动创建工单，24 小时去重，状态跟踪，WebSocket 实时通知
-- **可配置嵌入** — 基于 Protocol 的设计，支持本地（sentence-transformers）和 API（OpenAI 兼容）两种嵌入方式
+- **可配置嵌入** — 基于 Protocol 的设计，支持本地（fastembed，CPU ONNX）和 API（OpenAI 兼容）两种嵌入方式
 - **文档处理** — 支持 PDF、DOCX、Markdown、HTML 解析，可配置分块大小和重叠
 - **优雅降级** — LLM 不可用时返回原文片段；向量库不可用时降级为 BM25；Agent 异常时回退到 RAG
 - **可观测性** — 结构化 JSON 日志（含 trace_id），Prometheus 指标（请求数/延迟、RAG 查询、LLM Token、意图分布）
@@ -59,7 +59,7 @@ AskFlow 将私有知识库检索、意图识别、流程路由和工单管理串
 | 缓存 | Redis 7 |
 | 对象存储 | MinIO（S3 兼容） |
 | 大模型 | OpenAI 兼容 API（Ollama、vLLM 等） |
-| 嵌入模型 | sentence-transformers（本地）/ OpenAI 兼容 API |
+| 嵌入模型 | fastembed（本地，CPU ONNX）/ OpenAI 兼容 API |
 | 搜索 | BM25（rank_bm25 + jieba 分词）+ 向量检索 |
 | 认证 | JWT（PyJWT）+ bcrypt |
 | 日志 | structlog（JSON 格式） |
@@ -344,7 +344,7 @@ make migrate     # 运行数据库迁移
 查看 [.env.example](.env.example) 了解所有可配置项：
 
 - `LLM_BASE_URL` / `LLM_MODEL` — 大模型端点配置
-- `EMBEDDING_PROVIDER` — `local`（sentence-transformers）或 `api`（OpenAI 兼容）
+- `EMBEDDING_PROVIDER` — `api`（OpenAI 兼容，默认）或 `local`（fastembed，CPU ONNX）
 - `DATABASE_URL` — PostgreSQL 连接串
 - `REDIS_URL` — Redis 连接串
 - `CHROMA_HOST` / `CHROMA_PORT` — ChromaDB 连接配置

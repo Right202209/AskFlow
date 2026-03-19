@@ -6,7 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
 # Web framework
     "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.30.0",
+    "uvicorn>=0.30.0",
     "websockets>=13.0",
     "python-multipart>=0.0.9",
 # Database
@@ -21,7 +21,7 @@ dependencies = [
     "chromadb>=0.5.0",
 # LLM / Embeddings
     "httpx>=0.27.0",
-    "sentence-transformers>=3.0.0",
+    "fastembed>=0.4.0",
 # LangGraph
     "langgraph>=0.2.0",
 # Document parsing
@@ -34,7 +34,8 @@ dependencies = [
     "jieba>=0.42.1",
 # Auth
     "pyjwt>=2.8.0",
-    "passlib[bcrypt]>=1.7.4",
+    "passlib>=1.7.4",
+    "bcrypt>=4.0.1,<4.1.0",
 # Observability
     "structlog>=24.1.0",
     "prometheus-client>=0.20.0",

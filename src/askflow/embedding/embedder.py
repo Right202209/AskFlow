@@ -25,19 +25,17 @@ class LocalEmbedder:
 
     def _load_model(self):
         if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            self._model = SentenceTransformer(settings.embedding_model)
-            self._dimension = self._model.get_sentence_embedding_dimension()
+            from fastembed import TextEmbedding
+            self._model = TextEmbedding(model_name=settings.embedding_model)
         return self._model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import asyncio
         model = self._load_model()
-        loop = asyncio.get_event_loop()
-        embeddings = await loop.run_in_executor(
-            None, lambda: model.encode(texts, normalize_embeddings=True)
+        embeddings = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: list(model.embed(texts))
         )
-        return embeddings.tolist()
+        return [e.tolist() for e in embeddings]
 
     @property
     def dimension(self) -> int:
