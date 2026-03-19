@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AskFlow</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <h1>AskFlow</h1>
+            <div class="auth-section" id="authSection">
+                <input type="text" id="username" placeholder="Username" value="admin">
+                <input type="password" id="password" placeholder="Password" value="admin123">
+                <button id="loginBtn" onclick="login()">Login</button>
+                <span id="userInfo" style="display:none"></span>
+            </div>
+        </header>
+        <div class="chat-container">
+            <div class="messages" id="messages"></div>
+            <div class="input-area">
+                <textarea id="messageInput" placeholder="Type your question..." rows="2"
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}"></textarea>
+                <button id="sendBtn" onclick="sendMessage()" disabled>Send</button>
+                <button id="cancelBtn" onclick="cancelGeneration()" style="display:none">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/chat.js"></script>
+</body>
+</html>
