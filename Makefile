@@ -1,0 +1,40 @@
+.PHONY: dev test seed migrate lint clean docker-up docker-down create-user
+
+dev:
+	uvicorn askflow.main:create_app --factory --reload --host 0.0.0.0 --port 8000
+
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+migrate:
+	alembic upgrade head
+
+migrate-create:
+	alembic revision --autogenerate -m "$(msg)"
+
+seed:
+	python scripts/seed_data.py
+
+create-user:
+	python scripts/create_user.py --username $(username) --email $(email) --password $(password) --role $(role)
+
+test:
+	pytest tests/ -v --cov=src/askflow --cov-report=term-missing
+
+lint:
+	ruff check src/ tests/
+	ruff format --check src/ tests/
+
+format:
+	ruff format src/ tests/
+
+clean:
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	rm -rf .pytest_cache htmlcov .coverage dist build *.egg-info
+
+install:
+	pip install -e ".[dev]"
