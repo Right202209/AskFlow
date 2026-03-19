@@ -43,7 +43,7 @@ AskFlow connects private knowledge bases, intent recognition, workflow routing, 
 - **Agent System** — Rule + LLM dual intent classification, config-driven routing to RAG / ticket / handoff / clarification
 - **Streaming Chat** — WebSocket-based real-time token streaming with heartbeat, cancel, and auto-reconnect
 - **Ticket Management** — Automated ticket creation with 24-hour dedup, status tracking, and real-time WebSocket notifications
-- **Configurable Embedding** — Protocol-based design supporting local (sentence-transformers) and API (OpenAI-compatible) providers
+- **Configurable Embedding** — Protocol-based design supporting local (fastembed, CPU ONNX) and API (OpenAI-compatible) providers
 - **Document Processing** — PDF, DOCX, Markdown, HTML parsing with configurable chunking
 - **Graceful Degradation** — LLM down: return raw chunks; vector DB down: fallback to BM25; agent error: fallback to RAG
 - **Observability** — Structured JSON logs with trace_id, Prometheus metrics (request count/latency, RAG queries, LLM tokens, intent distribution)
@@ -60,7 +60,7 @@ AskFlow connects private knowledge bases, intent recognition, workflow routing, 
 | Cache | Redis 7 |
 | Object Storage | MinIO (S3-compatible) |
 | LLM | OpenAI-compatible API (Ollama, vLLM, etc.) |
-| Embedding | sentence-transformers (local) / OpenAI-compatible API |
+| Embedding | fastembed (local, CPU ONNX) / OpenAI-compatible API |
 | Search | BM25 (rank_bm25 + jieba) + vector search |
 | Auth | JWT (PyJWT) + bcrypt |
 | Logging | structlog (JSON) |
@@ -345,7 +345,7 @@ make migrate     # Run database migrations
 See [.env.example](.env.example) for all configurable options:
 
 - `LLM_BASE_URL` / `LLM_MODEL` — LLM endpoint configuration
-- `EMBEDDING_PROVIDER` — `local` (sentence-transformers) or `api` (OpenAI-compatible)
+- `EMBEDDING_PROVIDER` — `api` (OpenAI-compatible, default) or `local` (fastembed, CPU ONNX)
 - `DATABASE_URL` — PostgreSQL connection string
 - `REDIS_URL` — Redis connection string
 - `CHROMA_HOST` / `CHROMA_PORT` — ChromaDB connection
