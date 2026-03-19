@@ -4,13 +4,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config, AsyncConnection
 
-from askflow.models.base import Base
-from askflow.models.user import User
-from askflow.models.conversation import Conversation
-from askflow.models.message import Message
-from askflow.models.ticket import Ticket
-from askflow.models.document import Document
-from askflow.models.intent_config import IntentConfig
+from askflow.models import Base
 
 config = context.config
 

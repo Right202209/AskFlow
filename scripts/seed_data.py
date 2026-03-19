@@ -8,9 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from askflow.core.database import async_session_factory, engine
 from askflow.core.security import hash_password
-from askflow.models.base import Base
-from askflow.models.user import User, UserRole
-from askflow.models.intent_config import IntentConfig
+from askflow.models import Base, UserRole
 
 
 INTENT_SEEDS = [
