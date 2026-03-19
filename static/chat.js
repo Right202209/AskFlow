@@ -59,6 +59,10 @@ function connectWS() {
 }
 
 function handleServerMessage(msg) {
+    if (msg.conversation_id) {
+        conversationId = msg.conversation_id;
+    }
+
     switch (msg.type) {
         case 'token':
             if (!currentBubble) {

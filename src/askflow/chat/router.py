@@ -100,18 +100,31 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                     await manager.send_error(connection_id, str(e))
                     continue
 
-                await session_store.add_message(conversation_id, "user", msg.content)
-                history = await session_store.get_history(conversation_id)
-
                 async with async_session_factory() as db:
+                    conv_repo = ConversationRepo(db)
                     msg_repo = MessageRepo(db)
+
                     try:
                         conv_uuid = uuid.UUID(conversation_id)
                     except ValueError:
-                        conv_repo = ConversationRepo(db)
                         conv = await conv_repo.create(user_id=user_id)
                         conv_uuid = conv.id
-                        conversation_id = str(conv_uuid)
+                    else:
+                        conv = await conv_repo.get_by_id(conv_uuid)
+                        if conv is None:
+                            conv = await conv_repo.create(user_id=user_id)
+                            conv_uuid = conv.id
+                        elif conv.user_id != user_id:
+                            await manager.send_error(
+                                connection_id,
+                                "Conversation not found for current user",
+                            )
+                            continue
+
+                    conversation_id = str(conv_uuid)
+
+                    await session_store.add_message(conversation_id, "user", msg.content)
+                    history = await session_store.get_history(conversation_id)
 
                     await msg_repo.create(
                         conversation_id=conv_uuid,
