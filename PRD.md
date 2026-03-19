@@ -88,7 +88,7 @@ AskFlow 是一套基于 **RAG + Agent** 的智能客服系统，将"找知识、
                            │
 ┌──────────────────────────▼──────────────────────────────┐
 │                      数据层 Data                         │
-│  PostgreSQL  ·  Redis  ·  Milvus  ·  对象存储 (MinIO)    │
+│  PostgreSQL  ·  Redis  ·  ChromaDB  ·  对象存储 (MinIO)   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -143,7 +143,7 @@ sequenceDiagram
 | -------------- | ------------- | ------------------------------------------------------------ |
 | **后端框架**   | FastAPI       | 原生 async/await、WebSocket 支持、自动 OpenAPI 文档生成      |
 | **Agent 编排** | LangGraph     | 比 LangChain 更适合有状态的多步骤 Agent 工作流，支持条件分支和循环 |
-| **向量数据库** | Milvus        | 生产级向量数据库，支持高可用部署、亿级向量、混合检索，ChromaDB 仅作开发环境替代 |
+| **向量数据库** | ChromaDB      | 轻量级向量数据库，内嵌式部署简单、Python 原生集成、支持持久化存储与元数据过滤 |
 | **关系数据库** | PostgreSQL    | 工单、用户、会话等结构化数据存储，成熟稳定                   |
 | **缓存**       | Redis         | 会话上下文缓存、热门问答缓存、分布式锁、限流计数             |
 | **对象存储**   | MinIO         | 知识文档原文件存储，S3 兼容，可平滑迁移云存储                |
@@ -156,15 +156,15 @@ sequenceDiagram
 ```
 ┌─── 开发环境 ──────────────────────────────────┐
 │  Docker Compose 单机部署                       │
-│  FastAPI + Milvus Standalone + PostgreSQL      │
+│  FastAPI + ChromaDB + PostgreSQL                         │
 │  + Redis + MinIO                               │
 └───────────────────────────────────────────────┘
 
 ┌─── 生产环境 ──────────────────────────────────┐
 │  Kubernetes 集群                               │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │ Ingress  │  │ Service  │  │ Milvus   │    │
-│  │ (Nginx)  │→ │ Pods x N │  │ Cluster  │    │
+│  │ Ingress  │  │ Service  │  │ ChromaDB │    │
+│  │ (Nginx)  │→ │ Pods x N │  │ Persist  │    │
 │  └──────────┘  └──────────┘  └──────────┘    │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
 │  │ PG HA    │  │ Redis    │  │ MinIO    │    │
