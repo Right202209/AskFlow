@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from askflow.schemas.common import APIResponse, PaginatedResponse
-from askflow.schemas.ticket import TicketCreate, TicketResponse
+from askflow.schemas.ticket import TicketCreate, TicketResponse, TicketUpdate
 from askflow.schemas.auth import LoginRequest, RegisterRequest
 from askflow.schemas.conversation import ConversationCreate
 
@@ -41,6 +41,16 @@ class TestTicketCreate:
             priority="high",
         )
         assert ticket.priority == "high"
+
+
+class TestTicketUpdate:
+    def test_rejects_null_status_when_provided(self):
+        with pytest.raises(ValidationError):
+            TicketUpdate(status=None)
+
+    def test_rejects_null_priority_when_provided(self):
+        with pytest.raises(ValidationError):
+            TicketUpdate(priority=None)
 
 
 class TestAuthSchemas:

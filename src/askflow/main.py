@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from askflow.config import settings
@@ -45,6 +46,10 @@ def create_app() -> FastAPI:
     app.include_router(metrics_router, tags=["Metrics"])
 
     app.mount("/static", StaticFiles(directory="static"), name="static")
+
+    @app.get("/", include_in_schema=False)
+    async def index():
+        return RedirectResponse(url="/static/index.html", status_code=307)
 
     @app.get("/health")
     async def health():

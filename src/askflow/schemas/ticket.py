@@ -3,23 +3,33 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+
+from askflow.models.ticket import TicketPriority, TicketStatus
 
 
 class TicketCreate(BaseModel):
     type: str
     title: str
     description: str | None = None
-    priority: str = "medium"
+    priority: TicketPriority = TicketPriority.medium
     conversation_id: uuid.UUID | None = None
     content: dict | None = None
 
 
 class TicketUpdate(BaseModel):
-    status: str | None = None
+    status: TicketStatus | None = None
     assignee: str | None = None
-    priority: str | None = None
+    priority: TicketPriority | None = None
     content: dict | None = None
+
+    @model_validator(mode="after")
+    def validate_nullable_enums(self) -> "TicketUpdate":
+        if "status" in self.model_fields_set and self.status is None:
+            raise ValueError("status cannot be null")
+        if "priority" in self.model_fields_set and self.priority is None:
+            raise ValueError("priority cannot be null")
+        return self
 
 
 class TicketResponse(BaseModel):

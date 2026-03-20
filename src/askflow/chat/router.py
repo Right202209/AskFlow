@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from askflow.agent.service import AgentService, get_agent_service
+from askflow.agent.service import get_agent_service
 from askflow.chat.manager import manager
 from askflow.chat.protocol import ClientMessage, ClientMessageType, ServerMessage, ServerMessageType
 from askflow.chat.session import session_store
 from askflow.core.auth import get_current_user
 from askflow.core.database import get_db
+from askflow.core.exceptions import NotFoundError
 from askflow.core.logging import get_logger
 from askflow.core.rate_limiter import check_rate_limit
 from askflow.models.message import MessageRole
@@ -49,6 +49,11 @@ async def get_messages(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    conv_repo = ConversationRepo(db)
+    conversation = await conv_repo.get_by_id(conversation_id)
+    if conversation is None or conversation.user_id != user.id:
+        raise NotFoundError("Conversation not found")
+
     repo = MessageRepo(db)
     messages = await repo.list_by_conversation(conversation_id)
     return APIResponse(data=[MessageResponse.model_validate(m) for m in messages])
@@ -58,7 +63,6 @@ async def get_messages(
 async def websocket_endpoint(ws: WebSocket, token: str):
     from askflow.core.security import decode_access_token
     from askflow.core.database import async_session_factory
-    from askflow.repositories.user_repo import UserRepo
 
     try:
         payload = decode_access_token(token)

@@ -60,7 +60,40 @@ class TicketRepo:
             ticket.status = status
             if status == TicketStatus.resolved:
                 ticket.resolved_at = datetime.now(timezone.utc)
+            else:
+                ticket.resolved_at = None
             await self._db.flush()
+        return ticket
+
+    async def update(
+        self,
+        ticket: Ticket,
+        *,
+        status: TicketStatus | None = None,
+        assignee: str | None = None,
+        priority: TicketPriority | None = None,
+        content: dict | None = None,
+        fields_set: set[str] | None = None,
+    ) -> Ticket:
+        fields = fields_set or set()
+
+        if "status" in fields and status is not None:
+            ticket.status = status
+            if status == TicketStatus.resolved:
+                ticket.resolved_at = datetime.now(timezone.utc)
+            else:
+                ticket.resolved_at = None
+
+        if "assignee" in fields:
+            ticket.assignee = assignee
+
+        if "priority" in fields and priority is not None:
+            ticket.priority = priority
+
+        if "content" in fields:
+            ticket.content = content
+
+        await self._db.flush()
         return ticket
 
     async def find_duplicate(
