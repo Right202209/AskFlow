@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.core.auth import get_current_user, require_role
 from askflow.core.database import get_db
-from askflow.embedding.embedder import create_embedder
+from askflow.core.logging import get_logger
+from askflow.embedding.embedder import EmbeddingProviderError, create_embedder
 from askflow.embedding.service import EmbeddingService
 from askflow.models.document import DocumentStatus
 from askflow.models.user import User, UserRole
@@ -17,6 +18,7 @@ from askflow.schemas.common import APIResponse
 from askflow.schemas.document import DocumentResponse
 
 router = APIRouter()
+logger = get_logger(__name__)
 
 
 @router.post("/documents", response_model=APIResponse[DocumentResponse])
@@ -40,12 +42,20 @@ async def upload_document(
     embedder = create_embedder()
     vector_store = get_vector_store()
     service = EmbeddingService(embedder, vector_store)
-    chunk_count = await service.index_document(
-        doc_id=str(doc.id),
-        file_path=file.filename or "upload.bin",
-        content_bytes=content_bytes,
-        title=title,
-    )
+    try:
+        chunk_count = await service.index_document(
+            doc_id=str(doc.id),
+            file_path=file.filename or "upload.bin",
+            content_bytes=content_bytes,
+            title=title,
+        )
+    except EmbeddingProviderError as error:
+        logger.error("document_index_failed", doc_id=str(doc.id), error=str(error))
+        return APIResponse(success=False, error=str(error))
+    except Exception as error:
+        logger.exception("document_index_unexpected_error", doc_id=str(doc.id))
+        return APIResponse(success=False, error="Document indexing failed unexpectedly")
+
     await doc_repo.update_status(doc.id, DocumentStatus.active, chunk_count=chunk_count)
     return APIResponse(data=DocumentResponse.model_validate(doc))
 
