@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import uuid
-
 from askflow.core.logging import get_logger
 from askflow.embedding.chunker import chunk_text
 from askflow.embedding.embedder import Embedder
@@ -38,6 +36,8 @@ class EmbeddingService:
             {"doc_id": doc_id, "title": title, "chunk_index": i}
             for i in range(len(chunks))
         ]
+        # Replace prior chunks only after parsing and embedding succeed.
+        self._vector_store.delete_by_doc_id(doc_id)
         self._vector_store.add(
             ids=ids,
             embeddings=embeddings,
