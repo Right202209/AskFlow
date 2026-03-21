@@ -89,14 +89,36 @@ class APIEmbedder:
                 f"Embedding API returned invalid JSON response: {body}"
             ) from error
 
-        items = data.get("data") if isinstance(data, dict) else None
+        items = None
+        if isinstance(data, dict):
+            if isinstance(data.get("data"), list):
+                items = data["data"]
+            elif isinstance(data.get("embeddings"), list):
+                items = data["embeddings"]
         if not isinstance(items, list):
             logger.error("embedding_api_missing_data", response=data)
             raise EmbeddingProviderError("Embedding API response missing data field")
 
         try:
-            return [item["embedding"] for item in sorted(items, key=lambda x: x["index"])]
-        except (KeyError, TypeError) as error:
+            normalized: list[tuple[int, list[float]]] = []
+            for fallback_index, item in enumerate(items):
+                if not isinstance(item, dict):
+                    raise TypeError("Embedding item must be an object")
+
+                raw_embedding = item.get("embedding")
+                if raw_embedding is None:
+                    raw_embedding = item.get("values")
+                if not isinstance(raw_embedding, list):
+                    raise KeyError("embedding")
+
+                raw_index = item.get("index", fallback_index)
+                if not isinstance(raw_index, int):
+                    raise TypeError("Embedding index must be an integer")
+
+                normalized.append((raw_index, [float(value) for value in raw_embedding]))
+
+            return [embedding for _, embedding in sorted(normalized, key=lambda x: x[0])]
+        except (KeyError, TypeError, ValueError) as error:
             logger.error("embedding_api_invalid_payload", response=data)
             raise EmbeddingProviderError("Embedding API response has invalid embedding payload") from error
 
