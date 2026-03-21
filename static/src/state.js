@@ -1,8 +1,9 @@
 import { sortByUpdatedAt } from "./dom.js";
+import { APP_PAGE } from "./page.js";
 
 export const API_BASE = window.location.origin;
 export const SESSION_KEY = "askflow.session";
-export const VIEW_KEY = "askflow.view";
+export const VIEW_KEY = `askflow.view.${APP_PAGE}`;
 export const INTENT_DRAFT_KEY = "askflow.intentDraft";
 
 export const VIEW_META = {

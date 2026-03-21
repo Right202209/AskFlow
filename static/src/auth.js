@@ -4,6 +4,7 @@ import { pushToast, setStatus } from "./toast.js";
 import { connectWS, clearWS } from "./ws.js";
 import { decodeJwtPayload } from "./dom.js";
 import { emit, on } from "./events.js";
+import { isPortalPage, isWorkspacePage, isAdminWorkspacePage, isUserWorkspacePage, workspaceUrlForRole, portalUrl } from "./page.js";
 
 const el = {};
 
@@ -23,9 +24,15 @@ export function initAuth() {
         logoutBtn: document.getElementById("logoutBtn"),
     });
 
-    el.authForm.addEventListener("submit", handleAuthSubmit);
-    el.authModeToggle.addEventListener("click", toggleAuthMode);
-    el.logoutBtn.addEventListener("click", logout);
+    if (el.authForm) {
+        el.authForm.addEventListener("submit", handleAuthSubmit);
+    }
+    if (el.authModeToggle) {
+        el.authModeToggle.addEventListener("click", toggleAuthMode);
+    }
+    if (el.logoutBtn) {
+        el.logoutBtn.addEventListener("click", logout);
+    }
 
     on("auth:expired", () => logout());
 }
@@ -36,6 +43,7 @@ function toggleAuthMode() {
 }
 
 export function applyAuthMode() {
+    if (!el.authTitle || !el.authSubmitBtn || !el.authModeToggle || !el.emailField) return;
     const isRegister = state.authMode === "register";
     el.authTitle.textContent = isRegister ? "注册" : "登录";
     el.authSubmitBtn.textContent = isRegister ? "创建账号" : "登录并连接";
@@ -79,6 +87,7 @@ async function register() {
 }
 
 async function login() {
+    if (!el.username || !el.password) return;
     const username = el.username.value.trim();
     const password = el.password.value;
 
@@ -102,6 +111,12 @@ async function login() {
         };
         state.conversations = loadStoredConversations();
         persistSession();
+
+        if (isPortalPage()) {
+            window.location.replace(workspaceUrlForRole(state.user.role));
+            return;
+        }
+
         updateAuthUI();
         setRoleCapabilities();
         emit("app:login");
@@ -166,16 +181,20 @@ export function logout() {
     emit("app:logout");
     setStatus("已退出登录。");
     pushToast("会话已清除。", "success");
+
+    if (isWorkspacePage()) {
+        window.location.replace(portalUrl());
+    }
 }
 
 export function updateAuthUI() {
     const loggedIn = Boolean(state.token && state.user);
-    el.authForm.classList.toggle("hidden", loggedIn);
-    el.authModeToggle.classList.toggle("hidden", loggedIn);
-    el.userSummary.classList.toggle("hidden", !loggedIn);
-    el.logoutBtn.classList.toggle("hidden", !loggedIn);
+    el.authForm?.classList.toggle("hidden", loggedIn);
+    el.authModeToggle?.classList.toggle("hidden", loggedIn);
+    el.userSummary?.classList.toggle("hidden", !loggedIn);
+    el.logoutBtn?.classList.toggle("hidden", !loggedIn);
 
-    if (loggedIn) {
+    if (loggedIn && el.userNameText && el.userRolePill) {
         el.userNameText.textContent = state.user.username;
         el.userRolePill.textContent = state.user.role;
     }
@@ -187,4 +206,32 @@ export function setRoleCapabilities() {
         node.classList.toggle("hidden", !canAccessStaffViews);
     });
     emit("auth:roleChanged");
+}
+
+export function syncPageAccess() {
+    if (!state.token || !state.user) {
+        if (isWorkspacePage()) {
+            window.location.replace(portalUrl());
+            return false;
+        }
+        return true;
+    }
+
+    const workspaceUrl = workspaceUrlForRole(state.user.role);
+    if (isPortalPage()) {
+        window.location.replace(workspaceUrl);
+        return false;
+    }
+
+    if (isAdminWorkspacePage() && !isStaffRole()) {
+        window.location.replace(workspaceUrl);
+        return false;
+    }
+
+    if (isUserWorkspacePage() && isStaffRole()) {
+        window.location.replace(workspaceUrl);
+        return false;
+    }
+
+    return true;
 }

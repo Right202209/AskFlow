@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AskFlow Admin Workspace</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-app-page="admin">
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand-card">
+                <div class="brand-card-glow"></div>
+                <p class="eyebrow">AskFlow Admin Workspace</p>
+                <h1>管理员工作台</h1>
+                <p class="brand-copy">面向客服和运营团队的完整后台，统一管理对话、知识库、意图配置、分析和工单流转。</p>
+                <div class="brand-strip">
+                    <span>Operations</span>
+                    <span>Knowledge</span>
+                    <span>Analytics</span>
+                </div>
+            </div>
+
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Current Session</p>
+                        <h2>登录状态</h2>
+                    </div>
+                </div>
+                <div class="user-summary hidden" id="userSummary">
+                    <div>
+                        <p class="eyebrow">Session</p>
+                        <strong id="userNameText">-</strong>
+                    </div>
+                    <span class="status-pill" id="userRolePill">guest</span>
+                </div>
+                <div class="connection-box">
+                    <span class="status-dot" id="connectionDot"></span>
+                    <div class="connection-copy">
+                        <span class="connection-label">Realtime Transport</span>
+                        <span id="connectionText">未连接</span>
+                    </div>
+                </div>
+                <button class="secondary-btn full-width hidden" id="logoutBtn" type="button">退出登录</button>
+            </section>
+
+            <nav class="panel nav-panel">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">Workspace Map</p>
+                        <h2>页面导航</h2>
+                    </div>
+                </div>
+                <div class="nav-list" id="navList">
+                    <button class="nav-item" data-view="chat" type="button">
+                        <span class="nav-item-title">对话工作台</span>
+                        <small>流式会话、上下文检查与来源引用</small>
+                    </button>
+                    <button class="nav-item" data-view="tickets" type="button">
+                        <span class="nav-item-title">工单中心</span>
+                        <small>创建、分派、更新和关联会话</small>
+                    </button>
+                    <button class="nav-item" data-view="documents" type="button">
+                        <span class="nav-item-title">知识库文档</span>
+                        <small>上传、索引、筛选和原始记录检查</small>
+                    </button>
+                    <button class="nav-item" data-view="intents" type="button">
+                        <span class="nav-item-title">意图配置</span>
+                        <small>路由目标、阈值、关键词与导入预览</small>
+                    </button>
+                    <button class="nav-item active" data-view="analytics" type="button">
+                        <span class="nav-item-title">分析看板</span>
+                        <small>会话、工单、意图和运营摘要</small>
+                    </button>
+                    <button class="nav-item" data-view="tools" type="button">
+                        <span class="nav-item-title">接口调试</span>
+                        <small>直接验证 RAG 与分类接口输出</small>
+                    </button>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar panel workspace-hero">
+                <div class="workspace-hero-main">
+                    <p class="eyebrow">Admin Workspace</p>
+                    <h2 id="viewTitle">分析看板</h2>
+                    <p class="hero-copy" id="viewHint">查看对话量、消息量、工单状态和意图分布。</p>
+                </div>
+                <div class="workspace-hero-side">
+                    <div class="hero-metric-grid">
+                        <article class="hero-metric-card">
+                            <span>Session</span>
+                            <strong id="heroSession">Guest</strong>
+                        </article>
+                        <article class="hero-metric-card">
+                            <span>Socket</span>
+                            <strong id="heroSocket">Idle</strong>
+                        </article>
+                        <article class="hero-metric-card">
+                            <span>Conversations</span>
+                            <strong id="heroConversationCount">0</strong>
+                        </article>
+                        <article class="hero-metric-card">
+                            <span>Tickets</span>
+                            <strong id="heroTicketCount">0</strong>
+                        </article>
+                    </div>
+                    <div class="topbar-actions">
+                        <span class="status-pill status-pill-live" id="heroStatusBadge" data-state="idle">guest</span>
+                        <span class="subtle-text" id="heroWorkspace">分析看板</span>
+                        <button class="ghost-btn" id="refreshCurrentViewBtn" type="button">刷新当前页</button>
+                    </div>
+                </div>
+            </header>
+
+            <section class="view" id="view-chat">
+                <div class="chat-layout">
+                    <section class="panel conversation-panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Conversation Index</p>
+                                <h2>最近会话</h2>
+                            </div>
+                            <button class="secondary-btn small" id="newConversationBtn" type="button">新建会话</button>
+                        </div>
+                        <p class="panel-note">当前列表基于本地索引和历史会话 ID 恢复，适合运营视角下的最近访问工作区。</p>
+                        <div class="toolbar-row stacked-mobile">
+                            <input type="text" id="conversationSearch" placeholder="搜索会话标题、摘要或 ID">
+                            <label class="checkbox-row compact-checkbox">
+                                <input type="checkbox" id="conversationOnlyActive">
+                                <span>只看当前会话</span>
+                            </label>
+                        </div>
+                        <div class="conversation-list" id="conversationList"></div>
+                    </section>
+
+                    <section class="panel chat-panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Streaming Chat</p>
+                                <h2 id="chatConversationTitle">请选择或创建会话</h2>
+                            </div>
+                            <div class="inline-meta">
+                                <span class="subtle-text" id="conversationMeta">消息历史会在切换会话时重新加载。</span>
+                            </div>
+                        </div>
+                        <div class="messages" id="messages"></div>
+                        <div class="composer">
+                            <textarea id="messageInput" rows="3" placeholder="输入问题，Enter 发送，Shift + Enter 换行。"></textarea>
+                            <div class="composer-actions">
+                                <button class="ghost-btn" id="loadHistoryBtn" type="button">加载历史</button>
+                                <button class="danger-btn hidden" id="cancelBtn" type="button">停止生成</button>
+                                <button class="primary-btn" id="sendBtn" type="button" disabled>发送消息</button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <section class="view" id="view-tickets">
+                <div class="two-column">
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Ticket Intake</p>
+                                <h2>创建工单</h2>
+                            </div>
+                        </div>
+                        <p class="panel-note">提交后会自动关联当前选中的会话。客服与管理员可更新更多字段。</p>
+                        <form id="ticketForm" class="stack-form">
+                            <label>
+                                <span>工单类型</span>
+                                <input type="text" id="ticketType" placeholder="fault_report" value="fault_report">
+                            </label>
+                            <label>
+                                <span>标题</span>
+                                <input type="text" id="ticketTitle" placeholder="例如：登录报 500 错误">
+                            </label>
+                            <label>
+                                <span>描述</span>
+                                <textarea id="ticketDescription" rows="5" placeholder="补充问题背景、发生时间、影响范围。"></textarea>
+                            </label>
+                            <label>
+                                <span>优先级</span>
+                                <select id="ticketPriority">
+                                    <option value="low">low</option>
+                                    <option value="medium" selected>medium</option>
+                                    <option value="high">high</option>
+                                    <option value="urgent">urgent</option>
+                                </select>
+                            </label>
+                            <button class="primary-btn full-width" type="submit">提交工单</button>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Ticket Queue</p>
+                                <h2>我的工单</h2>
+                            </div>
+                            <button class="ghost-btn small" id="refreshTicketsBtn" type="button">刷新</button>
+                        </div>
+                        <p class="panel-note" id="ticketListHint">当前接口返回当前登录用户的工单列表。</p>
+                        <div class="toolbar-row stacked-mobile">
+                            <input type="text" id="ticketSearch" placeholder="搜索工单标题、描述或 ID">
+                            <select id="ticketStatusFilter">
+                                <option value="">全部状态</option>
+                                <option value="pending">pending</option>
+                                <option value="processing">processing</option>
+                                <option value="resolved">resolved</option>
+                                <option value="closed">closed</option>
+                            </select>
+                        </div>
+                        <div class="card-list" id="ticketList"></div>
+                        <div class="toolbar-row ticket-list-footer">
+                            <span class="subtle-text" id="ticketListMeta">默认加载最近 20 条工单。</span>
+                            <button class="ghost-btn small" id="ticketLoadMoreBtn" type="button">再加载 20 条</button>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="panel ticket-detail-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Ticket Detail</p>
+                            <h2>按工单 ID 查看 / 编辑</h2>
+                        </div>
+                    </div>
+                    <form id="ticketLookupForm" class="stack-form ticket-detail-form">
+                        <div class="inline-grid ticket-lookup-grid">
+                            <label>
+                                <span>工单 ID</span>
+                                <input type="text" id="ticketLookupId" placeholder="输入完整工单 UUID">
+                            </label>
+                            <div class="ticket-lookup-actions">
+                                <button class="ghost-btn" id="ticketLookupBtn" type="submit">加载详情</button>
+                                <button class="ghost-btn hidden" id="ticketDetailResetBtn" type="button">清空</button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="card-list" id="ticketDetailContainer"></div>
+                </section>
+            </section>
+
+            <section class="view" id="view-documents">
+                <div class="two-column">
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Document Intake</p>
+                                <h2>上传知识文档</h2>
+                            </div>
+                        </div>
+                        <form id="documentForm" class="stack-form">
+                            <label>
+                                <span>标题</span>
+                                <input type="text" id="documentTitle" placeholder="例如：退款政策说明">
+                            </label>
+                            <label>
+                                <span>来源</span>
+                                <input type="text" id="documentSource" placeholder="例如：help-center">
+                            </label>
+                            <label>
+                                <span>文件</span>
+                                <input type="file" id="documentFile">
+                            </label>
+                            <button class="primary-btn full-width" type="submit">上传并索引</button>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Corpus Browser</p>
+                                <h2>文档列表</h2>
+                            </div>
+                            <div class="toolbar-row stacked-mobile">
+                                <input type="text" id="documentSearch" placeholder="搜索标题、来源、路径或文档 ID">
+                                <select id="documentStatusFilter">
+                                    <option value="">全部状态</option>
+                                    <option value="active">active</option>
+                                    <option value="indexing">indexing</option>
+                                    <option value="archived">archived</option>
+                                </select>
+                                <button class="ghost-btn small" id="refreshDocumentsBtn" type="button">刷新</button>
+                            </div>
+                        </div>
+                        <div class="card-list" id="documentList"></div>
+                        <div class="toolbar-row ticket-list-footer">
+                            <span class="subtle-text" id="documentListMeta">默认显示最近 12 条文档。</span>
+                            <button class="ghost-btn small" id="documentLoadMoreBtn" type="button">再显示 12 条</button>
+                        </div>
+                        <div class="subpanel hidden" id="documentDetailDrawer"></div>
+                    </section>
+                </div>
+            </section>
+
+            <section class="view" id="view-intents">
+                <div class="two-column">
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Intent Editor</p>
+                                <h2 id="intentFormTitle">新建意图</h2>
+                            </div>
+                            <button class="ghost-btn small hidden" id="resetIntentFormBtn" type="button">清空编辑</button>
+                        </div>
+                        <div class="toolbar-row stacked-mobile">
+                            <span class="subtle-text" id="intentDraftHint">尚未修改。</span>
+                            <span class="subtle-text" id="intentDraftMeta">草稿会自动保存在本地。</span>
+                        </div>
+                        <div class="card-list hidden" id="intentDiffPreview"></div>
+                        <form id="intentForm" class="stack-form">
+                            <input type="hidden" id="intentId">
+                            <label>
+                                <span>名称</span>
+                                <input type="text" id="intentName" placeholder="faq">
+                            </label>
+                            <label>
+                                <span>展示名</span>
+                                <input type="text" id="intentDisplayName" placeholder="常见问题">
+                            </label>
+                            <label>
+                                <span>路由目标</span>
+                                <input type="text" id="intentRouteTarget" placeholder="rag">
+                            </label>
+                            <label>
+                                <span>描述</span>
+                                <textarea id="intentDescription" rows="3" placeholder="描述该意图的适用场景。"></textarea>
+                            </label>
+                            <label>
+                                <span>关键词（逗号分隔）</span>
+                                <input type="text" id="intentKeywords" placeholder="退款, 售后, 政策">
+                            </label>
+                            <label>
+                                <span>示例（每行一条）</span>
+                                <textarea id="intentExamples" rows="4" placeholder="退货政策是什么？"></textarea>
+                            </label>
+                            <div class="inline-grid">
+                                <label>
+                                    <span>阈值</span>
+                                    <input type="number" id="intentThreshold" min="0" max="1" step="0.01" value="0.7">
+                                </label>
+                                <label>
+                                    <span>优先级</span>
+                                    <input type="number" id="intentPriority" value="0">
+                                </label>
+                            </div>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="intentIsActive" checked>
+                                <span>启用该意图</span>
+                            </label>
+                            <button class="primary-btn full-width" type="submit">保存意图</button>
+                        </form>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Intent Registry</p>
+                                <h2>当前启用的意图</h2>
+                            </div>
+                            <div class="toolbar-row stacked-mobile">
+                                <button class="ghost-btn small" id="exportIntentsBtn" type="button">导出 JSON</button>
+                                <button class="ghost-btn small" id="importIntentsBtn" type="button">导入 JSON</button>
+                                <button class="ghost-btn small" id="refreshIntentsBtn" type="button">刷新</button>
+                                <input class="hidden" type="file" id="importIntentsFile" accept="application/json,.json">
+                            </div>
+                        </div>
+                        <div class="toolbar-row stacked-mobile">
+                            <input type="text" id="intentSearch" placeholder="搜索展示名、名称、路由或关键词">
+                        </div>
+                        <div class="subpanel hidden" id="intentImportPreview"></div>
+                        <div class="card-list" id="intentList"></div>
+                    </section>
+                </div>
+            </section>
+
+            <section class="view active" id="view-analytics">
+                <section class="panel">
+                    <div class="panel-heading">
+                        <div>
+                            <p class="eyebrow">Operations Analytics</p>
+                            <h2>系统运营数据</h2>
+                        </div>
+                        <button class="ghost-btn small" id="refreshAnalyticsBtn" type="button">刷新</button>
+                    </div>
+                    <div class="metric-grid" id="analyticsMetrics"></div>
+                    <div class="two-column analytics-summary-grid">
+                        <div class="subpanel">
+                            <h3>运营摘要</h3>
+                            <div class="card-list" id="analyticsSummary"></div>
+                        </div>
+                        <div class="subpanel">
+                            <h3>本地最近会话</h3>
+                            <div class="card-list" id="analyticsRecentConversations"></div>
+                        </div>
+                    </div>
+                    <div class="two-column charts-grid">
+                        <div class="subpanel">
+                            <h3>工单状态分布</h3>
+                            <div class="bar-list" id="ticketStatusBars"></div>
+                        </div>
+                        <div class="subpanel">
+                            <h3>意图分布</h3>
+                            <div class="bar-list" id="intentDistributionBars"></div>
+                        </div>
+                    </div>
+                    <div class="subpanel">
+                        <h3>最近工单</h3>
+                        <div class="card-list" id="analyticsRecentTickets"></div>
+                    </div>
+                </section>
+            </section>
+
+            <section class="view" id="view-tools">
+                <div class="two-column">
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">RAG Query</p>
+                                <h2>知识问答调试</h2>
+                            </div>
+                        </div>
+                        <form id="ragForm" class="stack-form">
+                            <label>
+                                <span>问题</span>
+                                <textarea id="ragQuestion" rows="4" placeholder="例如：退款流程是什么？"></textarea>
+                            </label>
+                            <label>
+                                <span>Top K</span>
+                                <input type="number" id="ragTopK" min="1" max="10" value="5">
+                            </label>
+                            <button class="primary-btn full-width" type="submit">发起查询</button>
+                        </form>
+                        <div class="result-box" id="ragResult">暂无结果</div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <div>
+                                <p class="eyebrow">Intent Classifier</p>
+                                <h2>意图分类调试</h2>
+                            </div>
+                        </div>
+                        <form id="classifyForm" class="stack-form">
+                            <label>
+                                <span>消息内容</span>
+                                <textarea id="classifyMessage" rows="4" placeholder="例如：我要投诉服务态度"></textarea>
+                            </label>
+                            <button class="primary-btn full-width" type="submit">分类</button>
+                        </form>
+                        <div class="result-box" id="classifyResult">暂无结果</div>
+                    </section>
+                </div>
+            </section>
+
+            <footer class="status-bar">
+                <span id="statusText">正在恢复会话。</span>
+                <div class="toast-stack" id="toastStack"></div>
+            </footer>
+        </main>
+    </div>
+
+    <script type="module">
+        import("/static/dist/workspace-main.js").catch(() => import("/static/src/workspace-main.js"));
+    </script>
+</body>
+</html>

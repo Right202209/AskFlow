@@ -2,11 +2,14 @@ import { state, VIEW_META, VIEW_KEY } from "./state.js";
 import { setStatus, pushToast } from "./toast.js";
 import { isStaffRole } from "./api.js";
 import { emit } from "./events.js";
+import { getAllowedViews, getDefaultView } from "./page.js";
 
 let viewTitleEl = null;
 let viewHintEl = null;
+let allowedViews = new Set();
 
 export function initRouter() {
+    allowedViews = new Set(getAllowedViews());
     viewTitleEl = document.getElementById("viewTitle");
     viewHintEl = document.getElementById("viewHint");
 
@@ -28,6 +31,9 @@ function handleNavClick(event) {
 
 export function setView(view) {
     if (!VIEW_META[view]) return;
+    if (!allowedViews.has(view)) {
+        view = getDefaultView();
+    }
 
     if ((view === "documents" || view === "intents" || view === "analytics") && !isStaffRole()) {
         view = "chat";
@@ -45,6 +51,7 @@ export function setView(view) {
 
     viewTitleEl.textContent = VIEW_META[view].title;
     viewHintEl.textContent = VIEW_META[view].hint;
+    emit("view:changed", view);
 }
 
 function refreshCurrentView() {

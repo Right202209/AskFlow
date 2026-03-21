@@ -34,13 +34,13 @@ format:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	rm -rf .pytest_cache htmlcov .coverage dist build *.egg-info
+	rm -rf .pytest_cache htmlcov .coverage dist build static/dist *.egg-info
 
 install:
 	pip install -e ".[dev]"
 
 build-ui:
-	npx esbuild static/src/main.js --bundle --outfile=static/dist/app.js --sourcemap --format=esm --target=es2020
+	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]'
 
 watch-ui:
-	npx esbuild static/src/main.js --bundle --outfile=static/dist/app.js --sourcemap --format=esm --target=es2020 --watch
+	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]' --watch
