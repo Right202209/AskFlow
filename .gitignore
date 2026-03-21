@@ -13,3 +13,6 @@ build/
 htmlcov/
 .pytest_cache/
 *.db
+CLAUDE.md
+.claude
+

@@ -65,7 +65,7 @@ AskFlow 将私有知识库检索、意图识别、流程路由和工单管理串
 | 日志 | structlog（JSON 格式） |
 | 指标 | prometheus-client |
 | 数据库迁移 | Alembic |
-| 聊天界面 | 原生 HTML / JS / CSS |
+| 聊天界面 | 原生 HTML / JS / CSS（esbuild 打包） |
 
 ## 项目结构
 
@@ -75,15 +75,33 @@ AskFlow/
 ├── docker-compose.yml          # PostgreSQL, Redis, ChromaDB, MinIO
 ├── Dockerfile
 ├── Makefile                    # 开发命令
+├── package.json                # 前端工具链（esbuild）
 ├── alembic.ini
 ├── .env.example
 ├── alembic/                    # 数据库迁移
 │   ├── env.py
 │   └── versions/
-├── static/                     # 聊天界面
-│   ├── index.html
-│   ├── chat.js
-│   └── style.css
+├── static/                     # 管理控制台（原生 JS，模块化 ES Modules）
+│   ├── index.html              # SPA 外壳，侧边栏导航
+│   ├── style.css
+│   ├── src/                    # 源码模块（开发时直接加载；生产环境 esbuild 打包）
+│   │   ├── main.js             # 入口，初始化所有模块
+│   │   ├── state.js            # 集中状态管理 + localStorage 持久化
+│   │   ├── router.js           # SPA 视图切换，角色权限守卫
+│   │   ├── auth.js             # 登录/注册，JWT 管理
+│   │   ├── api.js              # REST API 封装
+│   │   ├── ws.js               # WebSocket 客户端（自动重连、心跳）
+│   │   ├── toast.js            # Toast 通知 + 状态栏
+│   │   ├── dom.js              # DOM 工具函数
+│   │   ├── events.js           # 发布/订阅事件总线
+│   │   └── views/              # 每个页面一个模块
+│   │       ├── chat.js         # 会话列表 + 流式对话
+│   │       ├── tickets.js      # 工单增删改查 + 搜索/筛选
+│   │       ├── documents.js    # 文档上传 + 重建索引（管理员）
+│   │       ├── intents.js      # 意图配置编辑器（管理员）
+│   │       ├── analytics.js    # 数据统计看板（管理员）
+│   │       └── tools.js        # RAG 问答 & 意图分类调试
+│   └── dist/                   # esbuild 输出（已 gitignore）
 ├── scripts/
 │   ├── seed_data.py            # 初始数据填充
 │   └── create_user.py          # 用户创建工具
@@ -337,6 +355,9 @@ make docker-up   # 启动基础设施
 make docker-down # 停止基础设施
 make seed        # 填充初始数据
 make migrate     # 运行数据库迁移
+make build-ui    # 打包前端（esbuild）
+make watch-ui    # 打包前端（文件监听模式）
+make create-user # 通过 CLI 创建用户
 ```
 
 ## 环境变量

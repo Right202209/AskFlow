@@ -66,7 +66,7 @@ AskFlow connects private knowledge bases, intent recognition, workflow routing, 
 | Logging | structlog (JSON) |
 | Metrics | prometheus-client |
 | Migrations | Alembic |
-| Chat UI | Vanilla HTML / JS / CSS |
+| Chat UI | Vanilla HTML / JS / CSS (esbuild bundled) |
 
 ## Project Structure
 
@@ -76,15 +76,33 @@ AskFlow/
 ├── docker-compose.yml          # PostgreSQL, Redis, ChromaDB, MinIO
 ├── Dockerfile
 ├── Makefile                    # Dev commands
+├── package.json                # Frontend tooling (esbuild)
 ├── alembic.ini
 ├── .env.example
 ├── alembic/                    # Database migrations
 │   ├── env.py
 │   └── versions/
-├── static/                     # Chat UI
-│   ├── index.html
-│   ├── chat.js
-│   └── style.css
+├── static/                     # Admin Console (vanilla JS, modular ES modules)
+│   ├── index.html              # SPA shell with sidebar nav
+│   ├── style.css
+│   ├── src/                    # Source modules (dev: loaded directly; prod: esbuild bundle)
+│   │   ├── main.js             # Entry point, initializes all modules
+│   │   ├── state.js            # Centralized state + localStorage persistence
+│   │   ├── router.js           # SPA view switching with role guards
+│   │   ├── auth.js             # Login/register, JWT management
+│   │   ├── api.js              # REST API wrapper
+│   │   ├── ws.js               # WebSocket client (auto-reconnect, heartbeat)
+│   │   ├── toast.js            # Toast notifications + status bar
+│   │   ├── dom.js              # DOM utilities
+│   │   ├── events.js           # Pub/sub event bus
+│   │   └── views/              # One module per page
+│   │       ├── chat.js         # Conversation list + streaming chat
+│   │       ├── tickets.js      # Ticket CRUD + search/filter
+│   │       ├── documents.js    # Document upload + reindex (admin)
+│   │       ├── intents.js      # Intent config editor (admin)
+│   │       ├── analytics.js    # Metrics dashboard (admin)
+│   │       └── tools.js        # RAG & intent debug forms
+│   └── dist/                   # esbuild output (gitignored)
 ├── scripts/
 │   ├── seed_data.py            # Initial data seeding
 │   └── create_user.py          # User creation utility
@@ -338,6 +356,9 @@ make docker-up   # Start infrastructure
 make docker-down # Stop infrastructure
 make seed        # Seed initial data
 make migrate     # Run database migrations
+make build-ui    # Bundle frontend (esbuild)
+make watch-ui    # Bundle frontend with file watcher
+make create-user # Create user via CLI
 ```
 
 ## Environment Variables
