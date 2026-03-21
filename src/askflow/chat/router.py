@@ -63,6 +63,7 @@ async def get_messages(
 async def websocket_endpoint(ws: WebSocket, token: str):
     from askflow.core.security import decode_access_token
     from askflow.core.database import async_session_factory
+    from askflow.repositories.user_repo import UserRepo
 
     try:
         payload = decode_access_token(token)
@@ -70,6 +71,12 @@ async def websocket_endpoint(ws: WebSocket, token: str):
     except Exception:
         await ws.close(code=4001, reason="Invalid token")
         return
+
+    async with async_session_factory() as db:
+        user = await UserRepo(db).get_by_id(user_id)
+        if user is None or not user.is_active:
+            await ws.close(code=4001, reason="User not found or inactive")
+            return
 
     connection_id = uuid.uuid4().hex
     await manager.connect(ws, connection_id, str(user_id))
