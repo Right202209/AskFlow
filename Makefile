@@ -1,4 +1,4 @@
-.PHONY: dev test seed migrate lint clean docker-up docker-down create-user
+.PHONY: dev test seed migrate lint clean docker-up docker-down create-user build-ui watch-ui
 
 dev:
 	uvicorn askflow.main:create_app --factory --reload --host 0.0.0.0 --port 8000
@@ -38,3 +38,9 @@ clean:
 
 install:
 	pip install -e ".[dev]"
+
+build-ui:
+	npx esbuild static/src/main.js --bundle --outfile=static/dist/app.js --sourcemap --format=esm --target=es2020
+
+watch-ui:
+	npx esbuild static/src/main.js --bundle --outfile=static/dist/app.js --sourcemap --format=esm --target=es2020 --watch

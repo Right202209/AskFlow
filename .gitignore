@@ -1,5 +1,6 @@
 .venv
 venv
+node_modules/
 .idea
 __pycache__
 *.pyc
@@ -12,4 +13,3 @@ build/
 htmlcov/
 .pytest_cache/
 *.db
-

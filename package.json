@@ -1,0 +1,27 @@
+{
+  "name": "askflow",
+  "version": "1.0.0",
+  "description": "Intelligent customer service system powered by RAG (Retrieval-Augmented Generation) and Agent architecture.",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Right202209/AskFlow.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Right202209/AskFlow/issues"
+  },
+  "homepage": "https://github.com/Right202209/AskFlow#readme",
+  "devDependencies": {
+    "esbuild": "^0.27.4"
+  }
+}
