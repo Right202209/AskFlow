@@ -13,13 +13,22 @@ from askflow.models.user import User, UserRole
 from askflow.repositories.user_repo import UserRepo
 
 
+def extract_bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        raise UnauthorizedError("Missing or invalid authorization header")
+
+    scheme, _, token = authorization.strip().partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise UnauthorizedError("Missing or invalid authorization header")
+
+    return token.strip()
+
+
 async def get_current_user(
     db: Annotated[AsyncSession, Depends(get_db)],
     authorization: str | None = Header(None),
 ) -> User:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise UnauthorizedError("Missing or invalid authorization header")
-    token = authorization.removeprefix("Bearer ")
+    token = extract_bearer_token(authorization)
     try:
         payload = decode_access_token(token)
         user_id = uuid.UUID(payload["sub"])
