@@ -1,289 +1,420 @@
-# AskFlow 前端路由表与页面原型结构
+# AskFlow 前端路由与组件架构
 
-## 1. 实现策略
+> 技术栈：React 19 + React Router v7 + Zustand + shadcn/ui + Tailwind CSS
 
-理想路由仍然建议采用：
+## 1. 路由表
 
-- `/login`
-- `/register`
-- `/app/chat`
-- `/app/chat/:conversationId`
-- `/app/tickets`
-- `/app/tickets/:ticketId`
-- `/admin/dashboard`
-- `/admin/documents`
-- `/admin/intents`
+使用 React Router v7 的 `createBrowserRouter`，Vite dev server 代理 API 请求到后端。
 
-但考虑到当前后端仅提供静态资源挂载，没有前端路由回退，本轮页面骨架采用：
+| 路由 | 页面组件 | 权限 | 主要接口 |
+|------|----------|------|----------|
+| `/login` | `LoginPage` | 公开 | `POST /api/v1/admin/auth/login` |
+| `/register` | `RegisterPage` | 公开 | `POST /api/v1/admin/auth/register` |
+| `/app/chat` | `ChatPage` | 登录用户 | `GET/POST conversations`, `WS /ws/{token}` |
+| `/app/chat/:conversationId` | `ChatPage` | 登录用户 | 同上 + `GET messages` |
+| `/app/tickets` | `TicketsPage` | 登录用户 | `GET /api/v1/tickets` |
+| `/app/tickets/:ticketId` | `TicketDetailPage` | 登录用户 | `GET/PUT /api/v1/tickets/{id}` |
+| `/admin/dashboard` | `DashboardPage` | agent/admin | `GET /api/v1/admin/analytics` |
+| `/admin/documents` | `DocumentsPage` | agent/admin | `GET docs`, `POST upload`, `DELETE` |
+| `/admin/intents` | `IntentsPage` | agent/admin | `GET/POST/PUT intents` |
 
-- `/static/index.html#/login`
-- `/static/index.html#/register`
-- `/static/index.html#/app/chat`
-- `/static/index.html#/app/chat/:conversationId`
-- `/static/index.html#/app/tickets`
-- `/static/index.html#/app/tickets/:ticketId`
-- `/static/index.html#/admin/dashboard`
-- `/static/index.html#/admin/documents`
-- `/static/index.html#/admin/intents`
+### 路由配置
 
-这意味着：
+```tsx
+// router/index.tsx
+const router = createBrowserRouter([
+  {
+    path: "/login",
+    element: <LoginPage />,
+  },
+  {
+    path: "/register",
+    element: <RegisterPage />,
+  },
+  {
+    element: <RequireAuth><AppLayout /></RequireAuth>,
+    children: [
+      { path: "/app/chat", element: <ChatPage /> },
+      { path: "/app/chat/:conversationId", element: <ChatPage /> },
+      { path: "/app/tickets", element: <TicketsPage /> },
+      { path: "/app/tickets/:ticketId", element: <TicketDetailPage /> },
+      {
+        element: <RequireRole roles={["agent", "admin"]} />,
+        children: [
+          { path: "/admin/dashboard", element: <DashboardPage /> },
+          { path: "/admin/documents", element: <DocumentsPage /> },
+          { path: "/admin/intents", element: <IntentsPage /> },
+        ],
+      },
+    ],
+  },
+  { path: "/", element: <Navigate to="/app/chat" replace /> },
+  { path: "*", element: <NotFoundPage /> },
+]);
+```
 
-- 文档中的业务路由是正式版目标
-- 代码中的 hash 路由是当前可直接运行的原型方案
+### 路由守卫
 
-## 2. 前端路由表
+```tsx
+// router/guards.tsx
 
-| 业务路由 | 原型路由 | 页面 | 权限 | 主要接口 |
-|------|------|------|------|------|
-| `/login` | `#/login` | 登录页 | 公开 | `POST /api/v1/admin/auth/login` |
-| `/register` | `#/register` | 注册页 | 公开 | `POST /api/v1/admin/auth/register` |
-| `/app/chat` | `#/app/chat` | 智能问答工作台 | 登录用户 | `GET/POST /api/v1/chat/conversations`、`GET /messages`、`WS /api/v1/chat/ws/{token}` |
-| `/app/chat/:conversationId` | `#/app/chat/:conversationId` | 指定会话页 | 登录用户 | 同上 |
-| `/app/tickets` | `#/app/tickets` | 我的工单列表 | 登录用户 | `GET /api/v1/tickets` |
-| `/app/tickets/:ticketId` | `#/app/tickets/:ticketId` | 工单详情 | 登录用户 | `GET /api/v1/tickets/{id}`、`PUT /api/v1/tickets/{id}` |
-| `/admin/dashboard` | `#/admin/dashboard` | 数据看板 | agent/admin | `GET /api/v1/admin/analytics` |
-| `/admin/documents` | `#/admin/documents` | 文档管理 | agent/admin | `GET /api/v1/admin/documents`、`POST /api/v1/embedding/documents` |
-| `/admin/intents` | `#/admin/intents` | 意图配置 | agent/admin，写操作仅 admin | `GET /api/v1/admin/intents`、`POST/PUT /api/v1/admin/intents` |
+// 检查登录态，未登录重定向到 /login
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const token = useAuthStore((s) => s.token);
+  const location = useLocation();
+  if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
+  return <>{children}</>;
+}
 
-## 3. 页面原型结构
+// 检查角色，不匹配重定向到 /app/chat
+function RequireRole({ roles }: { roles: string[] }) {
+  const role = useAuthStore((s) => s.role);
+  if (!role || !roles.includes(role)) return <Navigate to="/app/chat" replace />;
+  return <Outlet />;
+}
+```
 
-### 3.1 登录页
+## 2. 页面布局
 
-```text
+### 鉴权页面（无框架）
+
+```
 +------------------------------------------------------+
-| AskFlow 品牌区                                       |
-| 产品说明 / 系统卖点                                  |
 |                                                      |
-| 账号登录卡片                                         |
-| - 用户名                                             |
-| - 密码                                               |
-| - 登录按钮                                           |
-| - 错误提示                                           |
-| - 去注册链接                                         |
+|              品牌标识 + 登录/注册卡片                 |
+|                                                      |
 +------------------------------------------------------+
 ```
 
-关键状态：
+### 应用主框架 `AppLayout`
 
-- idle
-- submitting
-- success
-- error
-
-### 3.2 注册页
-
-```text
-+------------------------------------------------------+
-| 欢迎加入 AskFlow                                     |
-|                                                      |
-| 注册卡片                                             |
-| - 用户名                                             |
-| - 邮箱                                               |
-| - 密码                                               |
-| - 确认密码                                           |
-| - 注册按钮                                           |
-| - 返回登录链接                                       |
-+------------------------------------------------------+
 ```
-
-关键状态：
-
-- 表单校验
-- 提交中
-- 注册成功提示
-
-### 3.3 应用主框架
-
-```text
 +------------------+-----------------------------------+
-| 侧边导航         | 顶部条                            |
-| - 智能问答       | - 当前页面标题                    |
-| - 我的工单       | - 用户信息                        |
-| - 管理菜单       | - 退出登录                        |
-|                  +-----------------------------------+
-|                  | 页面主内容区                      |
+| AppSidebar       | PageHeader                        |
+|                  | - 面包屑 / 页面标题               |
+| - 品牌标识       | - 用户头像 / 退出                 |
+| - 导航菜单       +-----------------------------------+
+| - 角色感知       |                                   |
+|                  |         <Outlet />                |
+|                  |         页面主内容区               |
 |                  |                                   |
-|                  | 根据路由切换不同模块              |
 +------------------+-----------------------------------+
 ```
 
-公共组件：
+侧边栏菜单按角色动态渲染：
 
-- `AppSidebar`
-- `Topbar`
-- `NoticeBar`
-- `EmptyState`
-- `StatCard`
-- `TableCard`
-- `Drawer/Panel`
+```tsx
+const menuItems = [
+  // 所有角色可见
+  { label: "智能问答", path: "/app/chat", icon: MessageSquare },
+  { label: "我的工单", path: "/app/tickets", icon: Ticket },
+  // agent/admin 可见
+  { label: "数据看板", path: "/admin/dashboard", icon: BarChart3, roles: ["agent", "admin"] },
+  { label: "文档管理", path: "/admin/documents", icon: FileText, roles: ["agent", "admin"] },
+  { label: "意图配置", path: "/admin/intents", icon: Settings, roles: ["agent", "admin"] },
+];
+```
 
-### 3.4 智能问答工作台
+### 聊天页三栏布局
 
-```text
+```
 +--------------------+--------------------------+------------------+
-| 会话列表           | 聊天主区                 | 辅助信息栏       |
-| - 新建会话         | - 会话标题               | - 当前会话状态   |
-| - 会话项           | - 消息流                 | - 意图说明       |
-|                    | - 来源引用               | - 快捷创建工单   |
-|                    | - 输入框/发送/停止       | - 最近工单       |
+| ConversationList   | ChatArea                 | InfoPanel        |
+| 240px fixed        | flex-1                   | 280px fixed      |
+|                    |                          |                  |
+| [+ 新建会话]       | 消息标题                 | 意图标签         |
+| ─────────────      | ─────────────            | ─────────────    |
+| 会话 1 (active)    | UserBubble               | 来源引用卡片     |
+| 会话 2             | AssistantBubble          |   - 标题         |
+| 会话 3             |   (流式渲染中...)        |   - 分数         |
+|                    |                          |   - 摘要         |
+|                    |                          | ─────────────    |
+|                    | ─────────────            | [创建工单]       |
+|                    | [输入框] [发送] [停止]   |                  |
 +--------------------+--------------------------+------------------+
 ```
 
-关键组件拆分：
+## 3. 组件树
 
-- `ConversationSidebar`
-- `MessageList`
-- `Composer`
-- `SourceChips`
-- `IntentBadge`
-- `TicketComposerPanel`
-
-### 3.5 我的工单列表
-
-```text
-+------------------------------------------------------+
-| 标题区 + 筛选区                                      |
-| - 状态筛选                                           |
-| - 刷新                                               |
-|                                                      |
-| 工单列表卡片                                         |
-| - 标题 / 状态 / 优先级 / 时间 / 关联会话             |
-| - 点击进入详情                                       |
-+------------------------------------------------------+
 ```
-
-### 3.6 工单详情
-
-```text
-+---------------------------------+--------------------+
-| 工单主信息                      | 状态侧栏           |
-| - 标题                          | - 当前状态         |
-| - 类型/优先级                   | - agent/admin 可改 |
-| - 描述                          | - 时间信息         |
-| - 附加内容                      | - 返回列表         |
-| - 跳转关联会话                  |                    |
-+---------------------------------+--------------------+
-```
-
-### 3.7 数据看板
-
-```text
-+------------------------------------------------------+
-| 指标卡 4 宫格                                        |
-|                                                      |
-| 工单状态分布              | 意图分布                |
-| 图表/占位                 | 图表/占位               |
-|                                                      |
-| 平均置信度摘要                                     |
-+------------------------------------------------------+
-```
-
-### 3.8 文档管理
-
-```text
-+------------------------------------------------------+
-| 上传表单                                             |
-| - 文件                                               |
-| - 标题                                               |
-| - 来源                                               |
-| - 上传按钮                                           |
-|                                                      |
-| 状态筛选                                             |
-|                                                      |
-| 文档表格                                             |
-| - 标题 / 状态 / 分块 / 时间 / 操作                   |
-+------------------------------------------------------+
-```
-
-### 3.9 意图配置
-
-```text
-+-----------------------------------+------------------+
-| 意图列表                          | 编辑面板         |
-| - 名称                            | - display_name   |
-| - route_target                    | - description    |
-| - threshold                       | - keywords       |
-| - priority                        | - examples       |
-|                                   | - is_active      |
-+-----------------------------------+------------------+
-```
-
-## 4. 页面骨架范围
-
-本轮骨架实现覆盖：
-
-- 路由切换
-- 登录/注册表单
-- 角色感知导航
-- 聊天工作台框架
-- 工单列表与详情骨架
-- 管理看板骨架
-- 文档管理骨架
-- 意图配置骨架
-
-本轮不追求完全实现：
-
-- 完整视觉稿级细节
-- 所有异常分支
-- 表格复杂筛选
-- 真正的图表库集成
-- 文档预览
-- 完整权限矩阵
-
-## 5. 建议组件树
-
-```text
 App
-- Router
-  - AuthPage
-    - LoginForm
-    - RegisterForm
-  - AppLayout
-    - Sidebar
-    - Topbar
-    - NoticeBar
-    - ChatPage
-      - ConversationSidebar
-      - MessageList
-      - Composer
-      - TicketPanel
-    - TicketsPage
-    - TicketDetailPage
-    - DashboardPage
-    - DocumentsPage
-    - IntentsPage
+├── RouterProvider
+│   ├── LoginPage
+│   │   └── LoginForm (Card + Input + Button)
+│   ├── RegisterPage
+│   │   └── RegisterForm (Card + Input + Button)
+│   ├── RequireAuth
+│   │   └── AppLayout
+│   │       ├── AppSidebar
+│   │       ├── PageHeader
+│   │       └── Outlet
+│   │           ├── ChatPage
+│   │           │   ├── ConversationList
+│   │           │   │   └── ConversationItem
+│   │           │   ├── ChatArea
+│   │           │   │   ├── MessageList
+│   │           │   │   │   └── MessageBubble
+│   │           │   │   │       └── SourceChips
+│   │           │   │   └── ChatInput
+│   │           │   └── InfoPanel
+│   │           │       ├── IntentBadge
+│   │           │       └── CreateTicketDialog
+│   │           ├── TicketsPage
+│   │           │   ├── TicketFilters (Tabs)
+│   │           │   └── TicketTable
+│   │           ├── TicketDetailPage
+│   │           │   ├── TicketInfoCard
+│   │           │   └── TicketStatusForm
+│   │           ├── RequireRole
+│   │           │   ├── DashboardPage
+│   │           │   │   ├── StatCard (x4)
+│   │           │   │   ├── TicketStatusChart
+│   │           │   │   └── IntentDistributionChart
+│   │           │   ├── DocumentsPage
+│   │           │   │   ├── UploadDocumentDialog
+│   │           │   │   ├── DocumentFilters (Tabs)
+│   │           │   │   └── DocumentTable
+│   │           │   └── IntentsPage
+│   │           │       ├── IntentTable
+│   │           │       └── IntentFormDialog
+│   │           └── NotFoundPage
 ```
 
-## 6. 状态管理建议
+## 4. 状态管理 (Zustand)
 
-当前静态骨架建议保持轻量：
+### Auth Store
 
-- `localStorage`
-  - `askflow.token`
-  - `askflow.username`
-- 内存状态
-  - `currentRoute`
-  - `currentUser`
-  - `conversations`
-  - `currentConversationId`
-  - `messages`
-  - `tickets`
-  - `documents`
-  - `intents`
-  - `analytics`
+```tsx
+// stores/authStore.ts
+interface AuthState {
+  token: string | null;
+  username: string | null;
+  role: "user" | "agent" | "admin" | null;
+  userId: string | null;
+  login: (token: string, username: string) => void;
+  logout: () => void;
+}
+```
 
-后续如果切到 React/Vue，可平移为：
+持久化：`zustand/middleware` 的 `persist`，存储到 `localStorage`，key = `askflow-auth`。
 
-- 路由状态：React Router / Vue Router
-- 服务端状态：TanStack Query / Vue Query
-- 会话状态：Zustand / Pinia
+### Chat Store
 
-## 7. 本轮实现目标
+```tsx
+// stores/chatStore.ts
+interface ChatState {
+  conversations: Conversation[];
+  currentConversationId: string | null;
+  messages: Record<string, Message[]>;       // conversationId -> messages
+  streamingTokens: string;                   // 当前流式回答的累积文本
+  isStreaming: boolean;
+  intent: { label: string; confidence: number } | null;
+  sources: Source[];
 
-前端骨架要达到的效果：
+  // actions
+  setConversations: (conversations: Conversation[]) => void;
+  selectConversation: (id: string) => void;
+  appendToken: (token: string) => void;
+  finalizeMessage: () => void;
+  setIntent: (intent: { label: string; confidence: number } | null) => void;
+  setSources: (sources: Source[]) => void;
+}
+```
 
-1. 能登录并进入正确页面
-2. 能在不同页面之间导航
-3. 聊天页能承载现有 WebSocket 聊天能力
-4. 管理页能读取已有管理接口
-5. 结构上为后续组件化和框架迁移留出空间
+### Ticket Store
+
+```tsx
+// stores/ticketStore.ts
+interface TicketState {
+  tickets: Ticket[];
+  currentTicket: Ticket | null;
+  isLoading: boolean;
+  fetchTickets: (params?: { limit?: number; offset?: number }) => Promise<void>;
+  fetchTicket: (id: string) => Promise<void>;
+}
+```
+
+### Admin Store
+
+```tsx
+// stores/adminStore.ts
+interface AdminState {
+  analytics: AnalyticsData | null;
+  documents: Document[];
+  intents: IntentConfig[];
+  fetchAnalytics: () => Promise<void>;
+  fetchDocuments: () => Promise<void>;
+  fetchIntents: () => Promise<void>;
+}
+```
+
+## 5. Service 层
+
+```
+services/
+├── api.ts              # fetch 封装，挂 Bearer token，处理 401
+├── auth.ts             # login(), register()
+├── chat.ts             # getConversations(), createConversation(), getMessages()
+├── ticket.ts           # getTickets(), getTicket(), createTicket(), updateTicket()
+├── document.ts         # getDocuments(), uploadDocument(), reindexDocument(), deleteDocument()
+├── admin.ts            # getAnalytics(), getIntents(), createIntent(), updateIntent()
+└── jwt.ts              # decodeToken() — 解析 JWT payload（不验签）
+```
+
+### API Client 模式
+
+```tsx
+// services/api.ts
+async function apiClient<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = useAuthStore.getState().token;
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
+  });
+  if (res.status === 401) {
+    useAuthStore.getState().logout();
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || "Request failed");
+  return json.data;
+}
+```
+
+## 6. WebSocket Hook
+
+```tsx
+// hooks/useWebSocket.ts
+function useWebSocket(token: string | null) {
+  // 连接管理
+  // 心跳 ping/pong（30 秒间隔）
+  // 断线自动重连（指数退避，最大 5 次）
+  // 消息分发到 chatStore
+
+  // 暴露方法
+  return {
+    sendMessage: (conversationId: string, content: string) => void,
+    cancelGeneration: () => void,
+    isConnected: boolean,
+  };
+}
+```
+
+消息类型映射：
+
+| 服务端消息类型 | 前端处理 |
+|---------------|----------|
+| `token` | `chatStore.appendToken(data.content)` |
+| `message_end` | `chatStore.finalizeMessage()` |
+| `error` | Toast 提示错误 |
+| `intent` | `chatStore.setIntent(data)` |
+| `source` | `chatStore.setSources(data.sources)` |
+| `ticket` | Toast 提示 + 跳转工单详情 |
+| `pong` | 重置心跳计时器 |
+
+## 7. TypeScript 类型定义
+
+```
+types/
+├── api.ts              # APIResponse<T>, PaginatedResponse<T>
+├── auth.ts             # LoginRequest, LoginResponse, RegisterRequest
+├── chat.ts             # Conversation, Message, ClientMessage, ServerMessage
+├── ticket.ts           # Ticket, CreateTicketRequest, UpdateTicketRequest
+├── document.ts         # Document, UploadDocumentRequest
+├── intent.ts           # IntentConfig, CreateIntentRequest, UpdateIntentRequest
+└── admin.ts            # AnalyticsData
+```
+
+## 8. 目录结构总览
+
+```
+web/src/
+├── main.tsx                 # 入口
+├── App.tsx                  # RouterProvider
+├── router/
+│   ├── index.tsx            # createBrowserRouter 配置
+│   └── guards.tsx           # RequireAuth, RequireRole
+├── pages/
+│   ├── Auth/
+│   │   ├── LoginPage.tsx
+│   │   └── RegisterPage.tsx
+│   ├── App/
+│   │   ├── ChatPage.tsx
+│   │   ├── TicketsPage.tsx
+│   │   └── TicketDetailPage.tsx
+│   ├── Admin/
+│   │   ├── DashboardPage.tsx
+│   │   ├── DocumentsPage.tsx
+│   │   └── IntentsPage.tsx
+│   └── NotFoundPage.tsx
+├── components/
+│   ├── layout/
+│   │   ├── AppLayout.tsx
+│   │   ├── AppSidebar.tsx
+│   │   └── PageHeader.tsx
+│   ├── chat/
+│   │   ├── ConversationList.tsx
+│   │   ├── ConversationItem.tsx
+│   │   ├── MessageList.tsx
+│   │   ├── MessageBubble.tsx
+│   │   ├── ChatInput.tsx
+│   │   ├── SourceChips.tsx
+│   │   ├── IntentBadge.tsx
+│   │   └── InfoPanel.tsx
+│   ├── ticket/
+│   │   ├── TicketTable.tsx
+│   │   ├── TicketFilters.tsx
+│   │   ├── TicketInfoCard.tsx
+│   │   ├── TicketStatusForm.tsx
+│   │   └── CreateTicketDialog.tsx
+│   ├── document/
+│   │   ├── DocumentTable.tsx
+│   │   ├── DocumentFilters.tsx
+│   │   └── UploadDocumentDialog.tsx
+│   ├── intent/
+│   │   ├── IntentTable.tsx
+│   │   └── IntentFormDialog.tsx
+│   ├── common/
+│   │   ├── StatCard.tsx
+│   │   ├── StatusBadge.tsx
+│   │   ├── EmptyState.tsx
+│   │   └── ConfirmDialog.tsx
+│   └── ui/                  # shadcn/ui 生成的基础组件
+│       ├── button.tsx
+│       ├── card.tsx
+│       ├── dialog.tsx
+│       ├── input.tsx
+│       ├── table.tsx
+│       └── ...
+├── hooks/
+│   ├── useWebSocket.ts
+│   └── useMediaQuery.ts
+├── stores/
+│   ├── authStore.ts
+│   ├── chatStore.ts
+│   ├── ticketStore.ts
+│   └── adminStore.ts
+├── services/
+│   ├── api.ts
+│   ├── auth.ts
+│   ├── chat.ts
+│   ├── ticket.ts
+│   ├── document.ts
+│   ├── admin.ts
+│   └── jwt.ts
+├── types/
+│   ├── api.ts
+│   ├── auth.ts
+│   ├── chat.ts
+│   ├── ticket.ts
+│   ├── document.ts
+│   ├── intent.ts
+│   └── admin.ts
+└── styles/
+    └── globals.css          # Tailwind directives + CSS variables
+```

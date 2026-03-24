@@ -1,13 +1,25 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { RouterProvider } from "react-router";
+import { router } from "@/router";
+import { configureApiClient } from "@/services/api";
+import { useAuthStore } from "@/stores/authStore";
+import "@/styles/globals.css";
 
 function App() {
-  return (
-    <div>
-      <h1>AskFlow</h1>
-      <p>Frontend is under construction.</p>
-    </div>
-  );
+  const logout = useAuthStore((s) => s.logout);
+
+  useEffect(() => {
+    configureApiClient({
+      getToken: () => useAuthStore.getState().token,
+      onUnauthorized: () => {
+        logout();
+        window.location.href = "/login";
+      },
+    });
+  }, [logout]);
+
+  return <RouterProvider router={router} />;
 }
 
 createRoot(document.getElementById("root")!).render(
