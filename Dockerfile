@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir .
 FROM base AS runtime
 
 COPY src/ src/
-COPY static/ static/
 COPY alembic/ alembic/
 COPY alembic.ini .
 

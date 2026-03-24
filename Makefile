@@ -1,4 +1,4 @@
-.PHONY: dev test seed migrate lint clean docker-up docker-down create-user build-ui watch-ui
+.PHONY: dev test seed migrate lint clean docker-up docker-down create-user install-web dev-web build-web
 
 dev:
 	uvicorn askflow.main:create_app --factory --reload --host 0.0.0.0 --port 8000
@@ -34,13 +34,16 @@ format:
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	rm -rf .pytest_cache htmlcov .coverage dist build static/dist *.egg-info
+	rm -rf .pytest_cache htmlcov .coverage dist build *.egg-info
 
 install:
 	pip install -e ".[dev]"
 
-build-ui:
-	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]'
+install-web:
+	cd web && npm install
 
-watch-ui:
-	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]' --watch
+dev-web:
+	cd web && npm run dev
+
+build-web:
+	cd web && npm run build

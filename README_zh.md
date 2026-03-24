@@ -65,7 +65,9 @@ AskFlow 将私有知识库检索、意图识别、流程路由和工单管理串
 | 日志 | structlog（JSON 格式） |
 | 指标 | prometheus-client |
 | 数据库迁移 | Alembic |
-| 聊天界面 | 原生 HTML / JS / CSS（esbuild 打包） |
+| 聊天界面 | React 19 + Vite + shadcn/ui（在 `web/` 目录下建设中） |
+
+> **注意**：前端正在使用 React 19 + Vite + shadcn/ui 在 `web/` 目录下重建。旧版原生 JS 前端已移除。API 文档请访问 `/docs`。
 
 ## 项目结构
 
@@ -75,33 +77,12 @@ AskFlow/
 ├── docker-compose.yml          # PostgreSQL, Redis, ChromaDB, MinIO
 ├── Dockerfile
 ├── Makefile                    # 开发命令
-├── package.json                # 前端工具链（esbuild）
 ├── alembic.ini
 ├── .env.example
 ├── alembic/                    # 数据库迁移
 │   ├── env.py
 │   └── versions/
-├── static/                     # 管理控制台（原生 JS，模块化 ES Modules）
-│   ├── index.html              # SPA 外壳，侧边栏导航
-│   ├── style.css
-│   ├── src/                    # 源码模块（开发时直接加载；生产环境 esbuild 打包）
-│   │   ├── main.js             # 入口，初始化所有模块
-│   │   ├── state.js            # 集中状态管理 + localStorage 持久化
-│   │   ├── router.js           # SPA 视图切换，角色权限守卫
-│   │   ├── auth.js             # 登录/注册，JWT 管理
-│   │   ├── api.js              # REST API 封装
-│   │   ├── ws.js               # WebSocket 客户端（自动重连、心跳）
-│   │   ├── toast.js            # Toast 通知 + 状态栏
-│   │   ├── dom.js              # DOM 工具函数
-│   │   ├── events.js           # 发布/订阅事件总线
-│   │   └── views/              # 每个页面一个模块
-│   │       ├── chat.js         # 会话列表 + 流式对话
-│   │       ├── tickets.js      # 工单增删改查 + 搜索/筛选
-│   │       ├── documents.js    # 文档上传 + 重建索引（管理员）
-│   │       ├── intents.js      # 意图配置编辑器（管理员）
-│   │       ├── analytics.js    # 数据统计看板（管理员）
-│   │       └── tools.js        # RAG 问答 & 意图分类调试
-│   └── dist/                   # esbuild 输出（已 gitignore）
+├── web/                       # 前端（React 19 + Vite，建设中）
 ├── scripts/
 │   ├── seed_data.py            # 初始数据填充
 │   └── create_user.py          # 用户创建工具
@@ -235,11 +216,8 @@ make seed
 ```bash
 make dev
 # 服务运行在 http://localhost:8000
+# API 文档在 http://localhost:8000/docs
 ```
-
-### 6. 打开聊天界面
-
-浏览器访问 `http://localhost:8000/static/index.html`，使用 `admin / admin123` 登录后即可开始对话。
 
 ## API 接口
 
@@ -255,6 +233,7 @@ make dev
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/v1/chat/conversations` | 创建会话 |
+| GET | `/api/v1/chat/conversations` | 会话列表 |
 | GET | `/api/v1/chat/conversations/{id}/messages` | 获取消息历史 |
 | WS | `/api/v1/chat/ws/{token}` | WebSocket 聊天端点 |
 
@@ -345,32 +324,71 @@ make dev
 
 ## 开发命令
 
-```bash
-make dev         # 启动开发服务器（热重载）
-make test        # 运行测试（含覆盖率）
-make lint        # 代码检查
-make format      # 代码格式化
-make clean       # 清理构建产物
-make docker-up   # 启动基础设施
-make docker-down # 停止基础设施
-make seed        # 填充初始数据
-make migrate     # 运行数据库迁移
-make build-ui    # 打包前端（esbuild）
-make watch-ui    # 打包前端（文件监听模式）
-make create-user # 通过 CLI 创建用户
-```
+<!-- AUTO-GENERATED from Makefile — do not edit manually -->
+
+| 命令 | 说明 |
+|------|------|
+| `make dev` | 启动开发服务器（热重载，端口 8000） |
+| `make test` | 运行测试（含覆盖率） |
+| `make lint` | 代码检查 + 格式检查 |
+| `make format` | 代码自动格式化 |
+| `make clean` | 清理构建产物和缓存 |
+| `make install` | 安装 Python 依赖（可编辑模式） |
+| `make docker-up` | 启动基础设施（PostgreSQL、Redis、ChromaDB、MinIO） |
+| `make docker-down` | 停止基础设施 |
+| `make migrate` | 运行数据库迁移 |
+| `make migrate-create msg="..."` | 创建新迁移 |
+| `make seed` | 填充初始数据 |
+| `make create-user` | 通过 CLI 创建用户 |
+| `make install-web` | 安装前端依赖 |
+| `make dev-web` | 启动前端开发服务器（端口 5173） |
+| `make build-web` | 构建前端生产版本 |
+
+<!-- /AUTO-GENERATED -->
 
 ## 环境变量
 
-查看 [.env.example](.env.example) 了解所有可配置项：
+<!-- AUTO-GENERATED from .env.example — do not edit manually -->
 
-- `LLM_BASE_URL` / `LLM_MODEL` — 大模型端点配置
-- `EMBEDDING_PROVIDER` — `api`（OpenAI 兼容，默认）或 `local`（fastembed，CPU ONNX）
-- `DATABASE_URL` — PostgreSQL 连接串
-- `REDIS_URL` — Redis 连接串
-- `CHROMA_HOST` / `CHROMA_PORT` — ChromaDB 连接配置
-- `SECRET_KEY` — JWT 签名密钥（生产环境务必修改！）
-- `RATE_LIMIT_PER_MINUTE` — 单用户限流（默认 60 次/分钟）
+| 变量 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| **应用** | | | |
+| `APP_NAME` | 否 | `AskFlow` | 应用显示名称 |
+| `APP_ENV` | 否 | `development` | 环境（`development` / `production`） |
+| `DEBUG` | 否 | `true` | 启用调试模式 |
+| `SECRET_KEY` | **是** | — | JWT 签名密钥（生产环境务必修改！） |
+| **数据库** | | | |
+| `DATABASE_URL` | **是** | — | PostgreSQL 连接串（`postgresql+asyncpg://...`） |
+| **Redis** | | | |
+| `REDIS_URL` | **是** | — | Redis 连接串 |
+| **MinIO** | | | |
+| `MINIO_ENDPOINT` | **是** | — | MinIO 端点（`host:port`） |
+| `MINIO_ACCESS_KEY` | **是** | — | MinIO 访问密钥 |
+| `MINIO_SECRET_KEY` | **是** | — | MinIO 密钥 |
+| `MINIO_BUCKET` | 否 | `askflow-docs` | MinIO 存储桶名 |
+| `MINIO_SECURE` | 否 | `false` | MinIO 是否使用 HTTPS |
+| **ChromaDB** | | | |
+| `CHROMA_HOST` | **是** | — | ChromaDB 主机 |
+| `CHROMA_PORT` | 否 | `8100` | ChromaDB 端口 |
+| **大模型** | | | |
+| `LLM_BASE_URL` | **是** | — | OpenAI 兼容 API 地址 |
+| `LLM_API_KEY` | **是** | — | LLM API 密钥 |
+| `LLM_MODEL` | 否 | `qwen2.5:7b` | 模型名称 |
+| `LLM_MAX_TOKENS` | 否 | `2048` | 单次最大 Token 数 |
+| `LLM_TEMPERATURE` | 否 | `0.7` | 采样温度 |
+| **嵌入模型** | | | |
+| `EMBEDDING_PROVIDER` | 否 | `api` | `api`（OpenAI 兼容）或 `local`（fastembed，CPU ONNX） |
+| `EMBEDDING_MODEL` | 否 | `BAAI/bge-small-en-v1.5` | 嵌入模型名称 |
+| `EMBEDDING_API_URL` | 否 | — | 嵌入 API 地址（provider=api 时） |
+| `EMBEDDING_API_KEY` | 否 | — | 嵌入 API 密钥（provider=api 时） |
+| `EMBEDDING_DIMENSION` | 否 | `384` | 向量维度 |
+| **认证** | | | |
+| `JWT_ALGORITHM` | 否 | `HS256` | JWT 签名算法 |
+| `JWT_EXPIRE_MINUTES` | 否 | `1440` | Token 过期时间（分钟） |
+| **限流** | | | |
+| `RATE_LIMIT_PER_MINUTE` | 否 | `60` | 单用户每分钟请求限制 |
+
+<!-- /AUTO-GENERATED -->
 
 ## 许可证
 

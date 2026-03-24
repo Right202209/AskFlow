@@ -66,7 +66,9 @@ AskFlow connects private knowledge bases, intent recognition, workflow routing, 
 | Logging | structlog (JSON) |
 | Metrics | prometheus-client |
 | Migrations | Alembic |
-| Chat UI | Vanilla HTML / JS / CSS (esbuild bundled) |
+| Chat UI | React 19 + Vite + shadcn/ui (under construction in `web/`) |
+
+> **Note**: The frontend is being rebuilt with React 19 + Vite + shadcn/ui in the `web/` directory. The legacy vanilla JS frontend has been removed. API docs are available at `/docs`.
 
 ## Project Structure
 
@@ -76,33 +78,12 @@ AskFlow/
 ├── docker-compose.yml          # PostgreSQL, Redis, ChromaDB, MinIO
 ├── Dockerfile
 ├── Makefile                    # Dev commands
-├── package.json                # Frontend tooling (esbuild)
 ├── alembic.ini
 ├── .env.example
 ├── alembic/                    # Database migrations
 │   ├── env.py
 │   └── versions/
-├── static/                     # Admin Console (vanilla JS, modular ES modules)
-│   ├── index.html              # SPA shell with sidebar nav
-│   ├── style.css
-│   ├── src/                    # Source modules (dev: loaded directly; prod: esbuild bundle)
-│   │   ├── main.js             # Entry point, initializes all modules
-│   │   ├── state.js            # Centralized state + localStorage persistence
-│   │   ├── router.js           # SPA view switching with role guards
-│   │   ├── auth.js             # Login/register, JWT management
-│   │   ├── api.js              # REST API wrapper
-│   │   ├── ws.js               # WebSocket client (auto-reconnect, heartbeat)
-│   │   ├── toast.js            # Toast notifications + status bar
-│   │   ├── dom.js              # DOM utilities
-│   │   ├── events.js           # Pub/sub event bus
-│   │   └── views/              # One module per page
-│   │       ├── chat.js         # Conversation list + streaming chat
-│   │       ├── tickets.js      # Ticket CRUD + search/filter
-│   │       ├── documents.js    # Document upload + reindex (admin)
-│   │       ├── intents.js      # Intent config editor (admin)
-│   │       ├── analytics.js    # Metrics dashboard (admin)
-│   │       └── tools.js        # RAG & intent debug forms
-│   └── dist/                   # esbuild output (gitignored)
+├── web/                       # Frontend (React 19 + Vite, under construction)
 ├── scripts/
 │   ├── seed_data.py            # Initial data seeding
 │   └── create_user.py          # User creation utility
@@ -236,11 +217,8 @@ make seed
 ```bash
 make dev
 # Server runs at http://localhost:8000
+# API docs at http://localhost:8000/docs
 ```
-
-### 6. Open Chat UI
-
-Visit `http://localhost:8000/static/index.html`, log in with `admin / admin123`, and start chatting.
 
 ## API Endpoints
 
@@ -256,6 +234,7 @@ Visit `http://localhost:8000/static/index.html`, log in with `admin / admin123`,
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/v1/chat/conversations` | Create conversation |
+| GET | `/api/v1/chat/conversations` | List conversations |
 | GET | `/api/v1/chat/conversations/{id}/messages` | Get message history |
 | WS | `/api/v1/chat/ws/{token}` | WebSocket chat endpoint |
 
@@ -346,32 +325,71 @@ Visit `http://localhost:8000/static/index.html`, log in with `admin / admin123`,
 
 ## Development
 
-```bash
-make dev         # Start dev server with hot reload
-make test        # Run tests with coverage
-make lint        # Run ruff linter
-make format      # Auto-format code
-make clean       # Clean build artifacts
-make docker-up   # Start infrastructure
-make docker-down # Stop infrastructure
-make seed        # Seed initial data
-make migrate     # Run database migrations
-make build-ui    # Bundle frontend (esbuild)
-make watch-ui    # Bundle frontend with file watcher
-make create-user # Create user via CLI
-```
+<!-- AUTO-GENERATED from Makefile — do not edit manually -->
+
+| Command | Description |
+|---------|-------------|
+| `make dev` | Start dev server with hot reload (port 8000) |
+| `make test` | Run tests with coverage |
+| `make lint` | Run ruff linter + format check |
+| `make format` | Auto-format code with ruff |
+| `make clean` | Clean build artifacts and caches |
+| `make install` | Install Python dependencies (editable) |
+| `make docker-up` | Start infrastructure (PostgreSQL, Redis, ChromaDB, MinIO) |
+| `make docker-down` | Stop infrastructure |
+| `make migrate` | Run database migrations |
+| `make migrate-create msg="..."` | Create new migration |
+| `make seed` | Seed initial data |
+| `make create-user` | Create user via CLI |
+| `make install-web` | Install frontend dependencies |
+| `make dev-web` | Start frontend dev server (port 5173) |
+| `make build-web` | Build frontend for production |
+
+<!-- /AUTO-GENERATED -->
 
 ## Environment Variables
 
-See [.env.example](.env.example) for all configurable options:
+<!-- AUTO-GENERATED from .env.example — do not edit manually -->
 
-- `LLM_BASE_URL` / `LLM_MODEL` — LLM endpoint configuration
-- `EMBEDDING_PROVIDER` — `api` (OpenAI-compatible, default) or `local` (fastembed, CPU ONNX)
-- `DATABASE_URL` — PostgreSQL connection string
-- `REDIS_URL` — Redis connection string
-- `CHROMA_HOST` / `CHROMA_PORT` — ChromaDB connection
-- `SECRET_KEY` — JWT signing key (change in production!)
-- `RATE_LIMIT_PER_MINUTE` — Per-user rate limit (default: 60)
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| **Application** | | | |
+| `APP_NAME` | No | `AskFlow` | Application display name |
+| `APP_ENV` | No | `development` | Environment (`development` / `production`) |
+| `DEBUG` | No | `true` | Enable debug mode |
+| `SECRET_KEY` | **Yes** | — | JWT signing key (change in production!) |
+| **Database** | | | |
+| `DATABASE_URL` | **Yes** | — | PostgreSQL connection string (`postgresql+asyncpg://...`) |
+| **Redis** | | | |
+| `REDIS_URL` | **Yes** | — | Redis connection string |
+| **MinIO** | | | |
+| `MINIO_ENDPOINT` | **Yes** | — | MinIO endpoint (`host:port`) |
+| `MINIO_ACCESS_KEY` | **Yes** | — | MinIO access key |
+| `MINIO_SECRET_KEY` | **Yes** | — | MinIO secret key |
+| `MINIO_BUCKET` | No | `askflow-docs` | MinIO bucket name |
+| `MINIO_SECURE` | No | `false` | Use HTTPS for MinIO |
+| **ChromaDB** | | | |
+| `CHROMA_HOST` | **Yes** | — | ChromaDB host |
+| `CHROMA_PORT` | No | `8100` | ChromaDB port |
+| **LLM** | | | |
+| `LLM_BASE_URL` | **Yes** | — | OpenAI-compatible API base URL |
+| `LLM_API_KEY` | **Yes** | — | LLM API key |
+| `LLM_MODEL` | No | `qwen2.5:7b` | LLM model name |
+| `LLM_MAX_TOKENS` | No | `2048` | Max tokens per response |
+| `LLM_TEMPERATURE` | No | `0.7` | Sampling temperature |
+| **Embedding** | | | |
+| `EMBEDDING_PROVIDER` | No | `api` | `api` (OpenAI-compatible) or `local` (fastembed, CPU ONNX) |
+| `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | Embedding model name |
+| `EMBEDDING_API_URL` | No | — | Embedding API base URL (when provider=api) |
+| `EMBEDDING_API_KEY` | No | — | Embedding API key (when provider=api) |
+| `EMBEDDING_DIMENSION` | No | `384` | Embedding vector dimension |
+| **Auth** | | | |
+| `JWT_ALGORITHM` | No | `HS256` | JWT signing algorithm |
+| `JWT_EXPIRE_MINUTES` | No | `1440` | Token expiration (minutes) |
+| **Rate Limiting** | | | |
+| `RATE_LIMIT_PER_MINUTE` | No | `60` | Per-user rate limit |
+
+<!-- /AUTO-GENERATED -->
 
 ## License
 
