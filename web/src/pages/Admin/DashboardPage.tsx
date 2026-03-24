@@ -16,16 +16,34 @@ import {
 const PIE_COLORS = ["#f59e0b", "#3b82f6", "#22c55e", "#6b7280"];
 
 export function DashboardPage() {
-  const { analytics, isLoading, fetchAnalytics } = useAdminStore();
+  const { analytics, isLoading, error, fetchAnalytics } = useAdminStore();
 
   useEffect(() => {
     fetchAnalytics();
   }, [fetchAnalytics]);
 
-  if (isLoading || !analytics) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="p-6 text-sm text-muted-foreground">
+        暂无数据
       </div>
     );
   }

@@ -6,7 +6,7 @@ import * as adminService from "@/services/admin";
 import type { IntentConfig, CreateIntentRequest, UpdateIntentRequest } from "@/types/intent";
 
 export function IntentsPage() {
-  const { intents, isLoading, fetchIntents } = useAdminStore();
+  const { intents, isLoading, error, fetchIntents } = useAdminStore();
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === "admin";
   const [editingIntent, setEditingIntent] = useState<IntentConfig | null>(null);
@@ -30,6 +30,12 @@ export function IntentsPage() {
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-20">

@@ -21,7 +21,7 @@ const STATUS_COLORS: Record<DocumentStatus, string> = {
 };
 
 export function DocumentsPage() {
-  const { documents, isLoading, fetchDocuments } = useAdminStore();
+  const { documents, isLoading, error, fetchDocuments } = useAdminStore();
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === "admin";
   const [uploading, setUploading] = useState(false);
@@ -85,6 +85,12 @@ export function DocumentsPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       {/* Status filter */}
       <div className="flex gap-1">

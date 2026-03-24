@@ -16,27 +16,73 @@ export function useWebSocket() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const connectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const reconnectAttempts = useRef(0);
+  const shouldReconnectRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
 
-  const cleanup = useCallback(() => {
-    if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.close();
+  const clearTimers = useCallback(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = undefined;
     }
-    wsRef.current = null;
+    if (connectTimerRef.current) {
+      clearTimeout(connectTimerRef.current);
+      connectTimerRef.current = undefined;
+    }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = undefined;
+    }
   }, []);
+
+  const disposeSocket = useCallback((socket: WebSocket | null) => {
+    if (!socket) return;
+
+    socket.onmessage = null;
+    socket.onerror = null;
+    socket.onclose = null;
+
+    if (socket.readyState === WebSocket.CONNECTING) {
+      // Avoid closing a socket before the handshake finishes, which triggers
+      // a false error in React Strict Mode's development-only remount cycle.
+      socket.onopen = () => {
+        socket.onopen = null;
+        socket.close();
+      };
+      return;
+    }
+
+    socket.onopen = null;
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
+  }, []);
+
+  const cleanup = useCallback(() => {
+    clearTimers();
+    disposeSocket(wsRef.current);
+    wsRef.current = null;
+  }, [clearTimers, disposeSocket]);
 
   const connect = useCallback(() => {
     if (!token) return;
-    cleanup();
+
+    clearTimers();
+    disposeSocket(wsRef.current);
+    wsRef.current = null;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/chat/ws/${token}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (wsRef.current !== ws) {
+        ws.close();
+        return;
+      }
+
       reconnectAttempts.current = 0;
       heartbeatRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -47,6 +93,8 @@ export function useWebSocket() {
     };
 
     ws.onmessage = (event) => {
+      if (wsRef.current !== ws) return;
+
       const msg: ServerMessage = JSON.parse(event.data);
       switch (msg.type) {
         case "token":
@@ -73,19 +121,44 @@ export function useWebSocket() {
     };
 
     ws.onclose = () => {
-      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
-        const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts.current);
-        reconnectAttempts.current++;
-        setTimeout(connect, delay);
+      if (wsRef.current === ws) {
+        wsRef.current = null;
       }
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = undefined;
+      }
+      if (!shouldReconnectRef.current || reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) return;
+
+      const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts.current);
+      reconnectAttempts.current++;
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = undefined;
+        connect();
+      }, delay);
     };
-  }, [token, cleanup, appendToken, finalizeMessage, setIntent, setSources]);
+  }, [token, clearTimers, disposeSocket, appendToken, finalizeMessage, setIntent, setSources]);
 
   useEffect(() => {
-    connect();
-    return cleanup;
-  }, [connect, cleanup]);
+    if (!token) {
+      shouldReconnectRef.current = false;
+      reconnectAttempts.current = 0;
+      cleanup();
+      return;
+    }
+
+    shouldReconnectRef.current = true;
+    connectTimerRef.current = setTimeout(() => {
+      connectTimerRef.current = undefined;
+      connect();
+    }, 0);
+
+    return () => {
+      shouldReconnectRef.current = false;
+      reconnectAttempts.current = 0;
+      cleanup();
+    };
+  }, [token, connect, cleanup]);
 
   const sendMessage = useCallback((conversationId: string, content: string) => {
     conversationIdRef.current = conversationId;

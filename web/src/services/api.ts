@@ -3,6 +3,10 @@ import type { APIResponse } from "@/types/api";
 let getToken: () => string | null = () => null;
 let onUnauthorized: () => void = () => {};
 
+interface APIClientOptions extends RequestInit {
+  skipUnauthorizedHandler?: boolean;
+}
+
 export function configureApiClient(opts: {
   getToken: () => string | null;
   onUnauthorized: () => void;
@@ -13,7 +17,7 @@ export function configureApiClient(opts: {
 
 export async function apiClient<T>(
   path: string,
-  options?: RequestInit,
+  options?: APIClientOptions,
 ): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -34,7 +38,9 @@ export async function apiClient<T>(
   const res = await fetch(path, { ...options, headers });
 
   if (res.status === 401) {
-    onUnauthorized();
+    if (token && !options?.skipUnauthorizedHandler) {
+      onUnauthorized();
+    }
     throw new Error("Unauthorized");
   }
 

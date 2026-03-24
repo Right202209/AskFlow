@@ -10,6 +10,7 @@ interface AdminState {
   documents: Document[];
   intents: IntentConfig[];
   isLoading: boolean;
+  error: string | null;
 
   fetchAnalytics: () => Promise<void>;
   fetchDocuments: () => Promise<void>;
@@ -21,32 +22,39 @@ export const useAdminStore = create<AdminState>()((set) => ({
   documents: [],
   intents: [],
   isLoading: false,
+  error: null,
 
   fetchAnalytics: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const analytics = await adminService.getAnalytics();
       set({ analytics });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : "加载数据看板失败" });
     } finally {
       set({ isLoading: false });
     }
   },
 
   fetchDocuments: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const documents = await documentService.getDocuments();
       set({ documents });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : "加载文档失败" });
     } finally {
       set({ isLoading: false });
     }
   },
 
   fetchIntents: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       const intents = await adminService.getIntents();
       set({ intents });
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : "加载意图失败" });
     } finally {
       set({ isLoading: false });
     }
