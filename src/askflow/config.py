@@ -48,5 +48,8 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_per_minute: int = 60
 
+    # CORS
+    cors_origins: list[str] = ["http://localhost:5173"]
+
 
 settings = Settings()

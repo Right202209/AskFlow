@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
 
 from askflow.agent.intent_classifier import IntentClassifier
 from askflow.agent.state import AgentState
 from askflow.core.logging import get_logger
-from askflow.rag.llm_client import LLMClient
 from askflow.rag.service import RAGService
 from askflow.schemas.intent import IntentResult
 
@@ -75,15 +73,31 @@ async def clarify_node(state: AgentState) -> AgentState:
     return state
 
 
-def route_by_intent(state: AgentState) -> str:
+_FALLBACK_ROUTES: dict[str, str] = {
+    "faq": "rag",
+    "product": "rag",
+    "order_query": "rag",
+    "fault_report": "ticket",
+    "complaint": "ticket",
+    "handoff": "handoff",
+}
+
+VALID_ROUTES = {"rag", "ticket", "handoff", "clarify"}
+
+
+def route_by_intent(
+    state: AgentState,
+    route_map: dict[str, str] | None = None,
+) -> str:
     if not state.intent:
         return "rag"
     if state.needs_clarification and state.intent.confidence < 0.5:
         return "clarify"
 
     label = state.intent.label
-    if label == "handoff":
-        return "handoff"
-    if label in ("fault_report", "complaint"):
-        return "ticket"
-    return "rag"
+    mapping = route_map if route_map else _FALLBACK_ROUTES
+    target = mapping.get(label, "rag")
+    if target not in VALID_ROUTES:
+        logger.warning("invalid_route_target", label=label, target=target)
+        return "rag"
+    return target

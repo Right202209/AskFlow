@@ -111,6 +111,35 @@ class TicketRepo:
         result = await self._db.execute(stmt)
         return result.scalars().first()
 
+    async def list_all(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        status: TicketStatus | None = None,
+    ) -> list[Ticket]:
+        stmt = select(Ticket).order_by(Ticket.created_at.desc())
+        if status is not None:
+            stmt = stmt.where(Ticket.status == status)
+        stmt = stmt.limit(limit).offset(offset)
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_all(self, status: TicketStatus | None = None) -> int:
+        stmt = select(func.count(Ticket.id))
+        if status is not None:
+            stmt = stmt.where(Ticket.status == status)
+        result = await self._db.execute(stmt)
+        return result.scalar() or 0
+
+    async def count_by_user(
+        self, user_id: uuid.UUID, status: TicketStatus | None = None
+    ) -> int:
+        stmt = select(func.count(Ticket.id)).where(Ticket.user_id == user_id)
+        if status is not None:
+            stmt = stmt.where(Ticket.status == status)
+        result = await self._db.execute(stmt)
+        return result.scalar() or 0
+
     async def count_by_status(self) -> dict[str, int]:
         stmt = select(Ticket.status, func.count()).group_by(Ticket.status)
         result = await self._db.execute(stmt)

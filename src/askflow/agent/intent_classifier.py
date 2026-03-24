@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 
@@ -74,7 +75,6 @@ class IntentClassifier:
             temperature=0.1,
             max_tokens=100,
         )
-        import json
         response = response.strip()
         match = re.search(r"\{.*\}", response, re.DOTALL)
         if match:

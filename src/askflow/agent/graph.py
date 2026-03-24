@@ -14,7 +14,11 @@ class AgentGraph:
         self._classifier = classifier
         self._rag_service = rag_service
 
-    async def run(self, state: AgentState) -> AgentState:
+    async def run(
+        self,
+        state: AgentState,
+        route_map: dict[str, str] | None = None,
+    ) -> AgentState:
         from askflow.agent.nodes import (
             classify_node,
             clarify_node,
@@ -23,8 +27,10 @@ class AgentGraph:
             ticket_node,
         )
 
-        state = await classify_node(state, self._classifier)
-        route = route_by_intent(state)
+        if not state.intent:
+            state = await classify_node(state, self._classifier)
+
+        route = route_by_intent(state, route_map=route_map)
 
         logger.info("agent_routing", route=route, intent=state.intent.label if state.intent else None)
 

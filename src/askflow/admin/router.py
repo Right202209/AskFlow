@@ -14,9 +14,12 @@ from askflow.models.user import User, UserRole
 from askflow.repositories.user_repo import UserRepo
 from askflow.schemas.admin import AnalyticsResponse
 from askflow.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from askflow.schemas.common import APIResponse
+from askflow.schemas.common import APIResponse, PaginatedResponse
 from askflow.schemas.document import DocumentResponse
 from askflow.schemas.intent import IntentConfigCreate, IntentConfigResponse, IntentConfigUpdate
+from askflow.schemas.ticket import TicketResponse
+from askflow.models.ticket import TicketStatus
+from askflow.repositories.ticket_repo import TicketRepo
 
 router = APIRouter()
 
@@ -43,6 +46,13 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         return APIResponse(success=False, error="Invalid credentials")
     token = create_access_token({"sub": str(user.id), "role": user.role.value})
     return APIResponse(data=TokenResponse(access_token=token))
+
+
+@router.get("/auth/me", response_model=APIResponse[UserResponse])
+async def get_current_user_info(
+    user: User = Depends(get_current_user),
+):
+    return APIResponse(data=UserResponse.model_validate(user))
 
 
 @router.get("/documents", response_model=APIResponse[list[DocumentResponse]])
@@ -109,6 +119,39 @@ async def update_intent(
     if not config:
         return APIResponse(success=False, error="Intent config not found")
     return APIResponse(data=IntentConfigResponse.model_validate(config))
+
+
+@router.delete("/intents/{config_id}", response_model=APIResponse)
+async def delete_intent(
+    config_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin)),
+):
+    service = AdminService(db)
+    deleted = await service.delete_intent_config(config_id)
+    if not deleted:
+        return APIResponse(success=False, error="Intent config not found")
+    return APIResponse(data={"deleted": True})
+
+
+@router.get("/tickets", response_model=PaginatedResponse[TicketResponse])
+async def list_all_tickets(
+    status: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+):
+    ticket_status = TicketStatus(status) if status else None
+    repo = TicketRepo(db)
+    tickets = await repo.list_all(limit=limit, offset=offset, status=ticket_status)
+    total = await repo.count_all(status=ticket_status)
+    return PaginatedResponse(
+        data=[TicketResponse.model_validate(t) for t in tickets],
+        total=total,
+        page=offset // limit + 1,
+        limit=limit,
+    )
 
 
 @router.get("/analytics", response_model=APIResponse[AnalyticsResponse])

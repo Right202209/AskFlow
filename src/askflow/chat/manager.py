@@ -26,6 +26,7 @@ class ConnectionManager:
     def disconnect(self, connection_id: str, user_id: str) -> None:
         self._connections.pop(connection_id, None)
         self._user_connections.get(user_id, set()).discard(connection_id)
+        WS_CONNECTIONS.dec()
         logger.info("ws_disconnected", connection_id=connection_id)
 
     async def send(self, connection_id: str, message: ServerMessage) -> None:

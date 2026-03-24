@@ -105,9 +105,10 @@ async def list_tickets(
 ):
     service = _get_service(db)
     tickets = await service.list_user_tickets(user.id, limit, offset)
+    total = await service.count_user_tickets(user.id)
     return PaginatedResponse(
         data=[TicketResponse.model_validate(t) for t in tickets],
-        total=len(tickets),
+        total=total,
         page=offset // limit + 1,
         limit=limit,
     )

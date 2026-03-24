@@ -4,6 +4,7 @@ from fastapi import APIRouter, Response
 from prometheus_client import (
     CollectorRegistry,
     Counter,
+    Gauge,
     Histogram,
     generate_latest,
 )
@@ -57,9 +58,9 @@ TICKET_COUNT = Counter(
     registry=registry,
 )
 
-WS_CONNECTIONS = Counter(
-    "askflow_ws_connections_total",
-    "Total WebSocket connections",
+WS_CONNECTIONS = Gauge(
+    "askflow_ws_connections_active",
+    "Active WebSocket connections",
     registry=registry,
 )
 

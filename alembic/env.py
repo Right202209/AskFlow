@@ -1,5 +1,3 @@
-from asyncio import current_task
-
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config, AsyncConnection

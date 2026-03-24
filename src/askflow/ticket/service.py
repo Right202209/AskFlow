@@ -61,6 +61,9 @@ class TicketService:
     ):
         return await self._repo.list_by_user(user_id, limit, offset)
 
+    async def count_user_tickets(self, user_id: uuid.UUID) -> int:
+        return await self._repo.count_by_user(user_id)
+
     async def update_status(self, ticket_id: uuid.UUID, status: str):
         ticket_status = TicketStatus(status)
         return await self._repo.update_status(ticket_id, ticket_status)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -74,7 +75,6 @@ class LLMClient:
                 payload = line.removeprefix("data: ").strip()
                 if payload == "[DONE]":
                     break
-                import json
                 chunk = json.loads(payload)
                 delta = chunk["choices"][0].get("delta", {})
                 if content := delta.get("content"):

@@ -17,6 +17,31 @@ from askflow.schemas.intent import IntentResult
 
 logger = get_logger(__name__)
 
+_route_map_cache: dict[str, str] | None = None
+
+
+async def _load_route_map() -> dict[str, str]:
+    global _route_map_cache
+    if _route_map_cache is not None:
+        return _route_map_cache
+    try:
+        from askflow.core.database import async_session_factory
+        from askflow.repositories.intent_config_repo import IntentConfigRepo
+
+        async with async_session_factory() as db:
+            repo = IntentConfigRepo(db)
+            configs = await repo.get_all_active()
+            _route_map_cache = {c.name: c.route_target for c in configs}
+    except Exception as e:
+        logger.warning("failed_to_load_route_map", error=str(e))
+        _route_map_cache = {}
+    return _route_map_cache
+
+
+def invalidate_route_map_cache() -> None:
+    global _route_map_cache
+    _route_map_cache = None
+
 
 class AgentService:
     def __init__(self, classifier: IntentClassifier, rag_service: RAGService) -> None:
@@ -45,7 +70,8 @@ class AgentService:
             logger.warning("classification_failed_fallback_rag", error=str(e))
             state.intent = IntentResult(label="faq", confidence=0.5)
 
-        route = route_by_intent(state)
+        route_map = await _load_route_map()
+        route = route_by_intent(state, route_map=route_map)
         logger.info("agent_route_decision", route=route)
 
         if route == "rag":
@@ -60,7 +86,7 @@ class AgentService:
 
                 return error_stream(), [], state.intent
 
-        state = await self._graph.run(state)
+        state = await self._graph.run(state, route_map=route_map)
 
         async def token_iter():
             for token in state.response_tokens:
