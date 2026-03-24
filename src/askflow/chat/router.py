@@ -40,6 +40,18 @@ async def create_conversation(
     return APIResponse(data=ConversationResponse.model_validate(conv))
 
 
+@router.get("/conversations", response_model=APIResponse[list[ConversationResponse]])
+async def list_conversations(
+    limit: int = 20,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    repo = ConversationRepo(db)
+    conversations = await repo.list_by_user(user.id, limit=limit, offset=offset)
+    return APIResponse(data=[ConversationResponse.model_validate(c) for c in conversations])
+
+
 @router.get(
     "/conversations/{conversation_id}/messages",
     response_model=APIResponse[list[MessageResponse]],
