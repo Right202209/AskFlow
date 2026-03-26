@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from askflow.core.logging import get_logger
@@ -68,8 +69,6 @@ async def execute_tool(
 
     # 简易参数提取：从问题中找类似订单号的数字串
     if mapped == "search_order":
-        import re
-
         match = re.search(r"[A-Za-z0-9]{6,}", question)
         order_id = match.group(0) if match else "UNKNOWN"
         raw = await handler(order_id)

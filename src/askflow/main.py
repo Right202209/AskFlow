@@ -7,15 +7,19 @@ from askflow.core.database import engine
 from askflow.core.exceptions import register_exception_handlers
 from askflow.core.middleware import setup_middleware
 from askflow.core.redis import redis_client
+from askflow.rag.llm_client import llm_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """在应用生命周期内初始化并释放共享基础设施。"""
     await redis_client.initialize()
-    yield
-    await engine.dispose()
-    await redis_client.close()
+    try:
+        yield
+    finally:
+        await llm_client.close()
+        await engine.dispose()
+        await redis_client.close()
 
 
 def create_app() -> FastAPI:

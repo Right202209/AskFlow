@@ -36,7 +36,7 @@ INTENT_SEEDS = [
         "name": "order_query",
         "display_name": "Order Query",
         "description": "Order status, shipping, and delivery queries",
-        "route_target": "rag",
+        "route_target": "tool",
         "keywords": {"items": ["order", "shipping", "delivery", "tracking", "package"]},
         "examples": {"items": ["Where is my order?", "When will my package arrive?"]},
         "confidence_threshold": 0.7,
