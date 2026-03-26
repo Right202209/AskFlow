@@ -20,6 +20,7 @@ class ServerMessageType(str, Enum):
     intent = "intent"
     source = "source"
     ticket = "ticket"
+    handoff = "handoff"
     pong = "pong"
 
 

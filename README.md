@@ -228,6 +228,7 @@ make dev
 |--------|------|-------------|
 | POST | `/api/v1/admin/auth/register` | Register new user |
 | POST | `/api/v1/admin/auth/login` | Login, get JWT token |
+| GET | `/api/v1/admin/auth/me` | Get current user info |
 
 ### Chat
 
@@ -275,6 +276,8 @@ make dev
 | GET | `/api/v1/admin/intents` | List intent configs |
 | POST | `/api/v1/admin/intents` | Create intent config |
 | PUT | `/api/v1/admin/intents/{id}` | Update intent config |
+| DELETE | `/api/v1/admin/intents/{id}` | Delete intent config |
+| GET | `/api/v1/admin/tickets` | List all tickets (admin/agent) |
 | GET | `/api/v1/admin/analytics` | Analytics dashboard |
 
 ### Observability
@@ -301,14 +304,15 @@ make dev
 
 ```json
 {
-  "type": "token | message_end | error | intent | source | ticket | pong",
+  "type": "token | message_end | error | intent | source | ticket | handoff | pong",
   "conversation_id": "uuid",
   "data": {
     "content": "streaming token or full message",
     "sources": [{"title": "...", "chunk": "...", "score": 0.92}],
     "label": "faq",
     "confidence": 0.95,
-    "ticket_id": "uuid"
+    "ticket_id": "uuid",
+    "transferred": true
   },
   "timestamp": 1710000000
 }
@@ -388,6 +392,8 @@ make dev
 | `JWT_EXPIRE_MINUTES` | No | `1440` | Token expiration (minutes) |
 | **Rate Limiting** | | | |
 | `RATE_LIMIT_PER_MINUTE` | No | `60` | Per-user rate limit |
+| **CORS** | | | |
+| `CORS_ORIGINS` | No | `["http://localhost:5173"]` | Allowed origins (JSON array) |
 
 <!-- /AUTO-GENERATED -->
 

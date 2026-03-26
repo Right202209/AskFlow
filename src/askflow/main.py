@@ -11,6 +11,7 @@ from askflow.core.redis import redis_client
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """在应用生命周期内初始化并释放共享基础设施。"""
     await redis_client.initialize()
     yield
     await engine.dispose()
@@ -18,6 +19,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    """创建 FastAPI 应用并挂载所有业务路由。"""
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
@@ -35,6 +37,7 @@ def create_app() -> FastAPI:
     from askflow.admin.router import router as admin_router
     from askflow.core.metrics import router as metrics_router
 
+    # 业务接口统一挂在版本化前缀下，指标接口保持顶层，便于采集。
     app.include_router(rag_router, prefix="/api/v1/rag", tags=["RAG"])
     app.include_router(embedding_router, prefix="/api/v1/embedding", tags=["Embedding"])
     app.include_router(chat_router, prefix="/api/v1/chat", tags=["Chat"])

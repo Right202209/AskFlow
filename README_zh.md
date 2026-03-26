@@ -227,6 +227,7 @@ make dev
 |------|------|------|
 | POST | `/api/v1/admin/auth/register` | 注册新用户 |
 | POST | `/api/v1/admin/auth/login` | 登录，获取 JWT Token |
+| GET | `/api/v1/admin/auth/me` | 获取当前用户信息 |
 
 ### 聊天
 
@@ -274,6 +275,8 @@ make dev
 | GET | `/api/v1/admin/intents` | 意图配置列表 |
 | POST | `/api/v1/admin/intents` | 创建意图配置 |
 | PUT | `/api/v1/admin/intents/{id}` | 更新意图配置 |
+| DELETE | `/api/v1/admin/intents/{id}` | 删除意图配置 |
+| GET | `/api/v1/admin/tickets` | 所有工单列表（管理员/客服） |
 | GET | `/api/v1/admin/analytics` | 统计看板 |
 
 ### 可观测性
@@ -300,14 +303,15 @@ make dev
 
 ```json
 {
-  "type": "token | message_end | error | intent | source | ticket | pong",
+  "type": "token | message_end | error | intent | source | ticket | handoff | pong",
   "conversation_id": "uuid",
   "data": {
     "content": "逐字内容或完整消息",
     "sources": [{"title": "...", "chunk": "...", "score": 0.92}],
     "label": "faq",
     "confidence": 0.95,
-    "ticket_id": "uuid"
+    "ticket_id": "uuid",
+    "transferred": true
   },
   "timestamp": 1710000000
 }
@@ -387,6 +391,8 @@ make dev
 | `JWT_EXPIRE_MINUTES` | 否 | `1440` | Token 过期时间（分钟） |
 | **限流** | | | |
 | `RATE_LIMIT_PER_MINUTE` | 否 | `60` | 单用户每分钟请求限制 |
+| **跨域** | | | |
+| `CORS_ORIGINS` | 否 | `["http://localhost:5173"]` | 允许的跨域来源（JSON 数组） |
 
 <!-- /AUTO-GENERATED -->
 

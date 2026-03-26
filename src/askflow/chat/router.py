@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.agent.service import get_agent_service
+from askflow.repositories.ticket_repo import TicketRepo
+from askflow.ticket.service import TicketService
 from askflow.chat.manager import manager
 from askflow.chat.protocol import ClientMessage, ClientMessageType, ServerMessage, ServerMessageType
 from askflow.chat.session import session_store
@@ -155,16 +157,24 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                         content=msg.content,
                     )
 
-                    agent_service = get_agent_service()
+                    ticket_service = TicketService(TicketRepo(db))
+                    agent_service = get_agent_service(
+                        ticket_service=ticket_service,
+                        conversation_repo=conv_repo,
+                    )
                     full_response = []
+                    intent_result = None
+                    sources = []
 
                     try:
-                        token_stream, sources, intent_result = await agent_service.process(
+                        result = await agent_service.process(
                             question=msg.content,
                             conversation_history=history,
                             user_id=str(user_id),
                             conversation_id=conversation_id,
                         )
+                        intent_result = result.intent
+                        sources = result.sources
 
                         if intent_result:
                             await manager.send(
@@ -179,21 +189,42 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                                 ),
                             )
 
-                        async for token_text in token_stream:
+                        async for token_text in result.token_stream:
                             if _cancel_flags.get(connection_id):
                                 break
                             full_response.append(token_text)
                             await manager.broadcast_token(
                                 connection_id, conversation_id, token_text
                             )
+
+                        # 工单创建成功时推送工单事件
+                        if result.ticket_data:
+                            await manager.send(
+                                connection_id,
+                                ServerMessage(
+                                    type=ServerMessageType.ticket,
+                                    conversation_id=conversation_id,
+                                    data=result.ticket_data,
+                                ),
+                            )
+
+                        # 转人工时推送 handoff 事件
+                        if result.should_handoff:
+                            await manager.send(
+                                connection_id,
+                                ServerMessage(
+                                    type=ServerMessageType.handoff,
+                                    conversation_id=conversation_id,
+                                    data={"transferred": True},
+                                ),
+                            )
                     except Exception as e:
                         logger.exception("agent_processing_error", error=str(e))
-                        error_msg = "Sorry, an error occurred. Please try again."
+                        error_msg = "抱歉，处理过程中出现错误，请稍后再试。"
                         full_response.append(error_msg)
                         await manager.broadcast_token(
                             connection_id, conversation_id, error_msg
                         )
-                        sources = []
 
                     response_text = "".join(full_response)
                     await session_store.add_message(

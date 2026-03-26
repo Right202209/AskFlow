@@ -21,11 +21,13 @@ _UUID_RE = re.compile(
 
 
 def _normalize_path(path: str) -> str:
+    """把路径中的具体资源 ID 归一化，避免指标标签基数过高。"""
     return _UUID_RE.sub("{id}", path)
 
 
 class TraceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # 优先复用上游传入的 trace_id，便于跨服务串联日志。
         trace_id = request.headers.get("X-Trace-ID") or generate_trace_id()
         trace_id_var.set(trace_id)
         logger.info(
@@ -38,6 +40,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
         duration = time.perf_counter() - start
 
         response.headers["X-Trace-ID"] = trace_id
+        # 导出指标前先做路径归一化，避免每个资源实例都产生单独时间序列。
         normalized_path = _normalize_path(request.url.path)
         REQUEST_COUNT.labels(
             method=request.method,
@@ -59,6 +62,7 @@ class TraceMiddleware(BaseHTTPMiddleware):
 
 
 def setup_middleware(app: FastAPI) -> None:
+    """按启动顺序注册日志、CORS 和链路追踪中间件。"""
     setup_logging()
     app.add_middleware(
         CORSMiddleware,

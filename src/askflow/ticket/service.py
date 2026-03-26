@@ -13,6 +13,8 @@ logger = get_logger(__name__)
 
 
 class TicketService:
+    """封装工单创建、可见性和更新权限相关的业务规则。"""
+
     def __init__(self, repo: TicketRepo) -> None:
         self._repo = repo
 
@@ -26,6 +28,7 @@ class TicketService:
         conversation_id: uuid.UUID | None = None,
         content: dict | None = None,
     ):
+        """创建工单；若检测到重复工单，则直接返回已有记录。"""
         duplicate = await self._repo.find_duplicate(user_id, title)
         if duplicate:
             logger.info("ticket_duplicate_found", existing_id=str(duplicate.id))
@@ -49,6 +52,7 @@ class TicketService:
         return await self._repo.get_by_id(ticket_id)
 
     async def get_ticket_for_actor(self, ticket_id: uuid.UUID, actor: User):
+        """只有工单本人或客服/管理员可以查看工单详情。"""
         ticket = await self._repo.get_by_id(ticket_id)
         if not ticket:
             return None
@@ -79,6 +83,7 @@ class TicketService:
         content: dict | None = None,
         fields_set: set[str] | None = None,
     ):
+        """在写库前校验角色权限，限制普通用户能修改的字段范围。"""
         ticket = await self.get_ticket_for_actor(ticket_id, actor)
         if not ticket:
             return None
@@ -87,6 +92,7 @@ class TicketService:
         is_staff = self._is_staff(actor)
 
         if not is_staff:
+            # 普通用户只能关闭自己的工单，不能改负责人或优先级。
             if "assignee" in provided_fields or "priority" in provided_fields:
                 raise ForbiddenError("Only staff can update assignee or priority")
             if "status" in provided_fields and status != TicketStatus.closed:
@@ -106,4 +112,5 @@ class TicketService:
 
     @staticmethod
     def _is_staff(actor: User) -> bool:
+        """管理员和客服都视为具备工单操作权限的工作人员。"""
         return actor.role in {UserRole.admin, UserRole.agent}
