@@ -18,7 +18,10 @@ export function TicketDetailPage() {
   const { ticketId } = useParams();
   const navigate = useNavigate();
   const { currentTicket, isLoading, fetchTicket, clearCurrent } = useTicketStore();
-  const role = useAuthStore((state) => state.role);
+  const { role, userId } = useAuthStore((state) => ({
+    role: state.role,
+    userId: state.userId,
+  }));
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
@@ -27,6 +30,10 @@ export function TicketDetailPage() {
   }, [ticketId, fetchTicket, clearCurrent]);
 
   const canEdit = role === "agent" || role === "admin";
+  const canCloseOwnTicket =
+    role === "user" &&
+    userId === currentTicket?.user_id &&
+    currentTicket?.status !== "closed";
 
   const handleStatusChange = async (status: TicketStatus) => {
     if (!ticketId || !currentTicket) return;
@@ -113,17 +120,34 @@ export function TicketDetailPage() {
                   ))}
                 </select>
               ) : (
-                <p
-                  className={cn(
-                    "mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-                    currentTicket.status === "pending" && "bg-yellow-100 text-yellow-800",
-                    currentTicket.status === "processing" && "bg-blue-100 text-blue-800",
-                    currentTicket.status === "resolved" && "bg-green-100 text-green-800",
-                    currentTicket.status === "closed" && "bg-gray-100 text-gray-800",
+                <div className="mt-1 space-y-2">
+                  <p
+                    className={cn(
+                      "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                      currentTicket.status === "pending" && "bg-yellow-100 text-yellow-800",
+                      currentTicket.status === "processing" && "bg-blue-100 text-blue-800",
+                      currentTicket.status === "resolved" && "bg-green-100 text-green-800",
+                      currentTicket.status === "closed" && "bg-gray-100 text-gray-800",
+                    )}
+                  >
+                    {STATUS_OPTIONS.find((option) => option.value === currentTicket.status)?.label}
+                  </p>
+                  {canCloseOwnTicket && (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange("closed")}
+                        disabled={updating}
+                        className="inline-flex h-9 items-center justify-center rounded-md border px-3 text-sm hover:bg-accent disabled:opacity-50"
+                      >
+                        关闭工单
+                      </button>
+                      <p className="text-xs text-muted-foreground">
+                        普通用户可以关闭自己的工单。
+                      </p>
+                    </div>
                   )}
-                >
-                  {STATUS_OPTIONS.find((option) => option.value === currentTicket.status)?.label}
-                </p>
+                </div>
               )}
             </div>
             <div>

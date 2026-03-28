@@ -90,6 +90,31 @@ async def test_delete_conversation_clears_session_history(monkeypatch, mock_user
     assert response.data.deleted is True
 
 
+async def test_delete_conversation_rolls_back_when_session_clear_fails(
+    monkeypatch, mock_user, mock_db
+):
+    conversation = make_conversation(mock_user.id)
+    repo = MagicMock()
+    repo.get_by_id_for_user = AsyncMock(return_value=conversation)
+    repo.delete = AsyncMock(return_value=True)
+    clear = AsyncMock(side_effect=RuntimeError("redis unavailable"))
+
+    monkeypatch.setattr("askflow.chat.router.ConversationRepo", lambda db: repo)
+    monkeypatch.setattr("askflow.chat.router.session_store", SimpleNamespace(clear=clear))
+
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        await delete_conversation(
+            conversation.id,
+            db=mock_db,
+            user=mock_user,
+        )
+
+    repo.delete.assert_awaited_once_with(conversation.id)
+    clear.assert_awaited_once_with(str(conversation.id))
+    mock_db.commit.assert_not_awaited()
+    mock_db.rollback.assert_awaited_once()
+
+
 async def test_delete_conversation_rejects_unknown_owner(monkeypatch, mock_user, mock_db):
     repo = MagicMock()
     repo.get_by_id_for_user = AsyncMock(return_value=None)

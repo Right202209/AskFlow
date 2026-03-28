@@ -12,7 +12,7 @@ import type { Ticket } from "@/types/ticket";
 export function ChatPage() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
-  const { sendMessage, cancelGeneration } = useWebSocket();
+  const { sendMessage, cancelGeneration, isConnected, connectionState } = useWebSocket();
 
   const {
     conversations,
@@ -61,7 +61,8 @@ export function ChatPage() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || isStreaming) return;
+    const content = input.trim();
+    if (!content || isStreaming || !isConnected) return;
 
     let nextConversationId = currentConversationId;
     if (!nextConversationId) {
@@ -70,9 +71,10 @@ export function ChatPage() {
       navigate(`/app/chat/${conversation.id}`, { replace: true });
     }
 
-    const content = input.trim();
+    const sent = sendMessage(nextConversationId, content);
+    if (!sent) return;
+
     addUserMessage(nextConversationId, content);
-    sendMessage(nextConversationId, content);
     setInput("");
   };
 
@@ -86,6 +88,14 @@ export function ChatPage() {
   const currentConversation =
     conversations.find((conversation) => conversation.id === currentConversationId) ?? null;
   const canCreateTicket = Boolean(currentConversationId && currentMessages.length > 0);
+  const connectionHint =
+    connectionState === "connecting"
+      ? "正在连接聊天服务，连接完成后才能发送消息。"
+      : connectionState === "reconnecting"
+        ? "连接已中断，正在重连，请稍候。"
+        : connectionState === "idle"
+          ? "聊天连接不可用，请稍后重试。"
+          : null;
 
   return (
     <>
@@ -111,6 +121,8 @@ export function ChatPage() {
           <ChatComposer
             input={input}
             isStreaming={isStreaming}
+            canSend={Boolean(input.trim()) && isConnected && !isStreaming}
+            connectionHint={connectionHint}
             onInputChange={setInput}
             onSend={handleSend}
             onCancel={cancelGeneration}

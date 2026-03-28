@@ -83,7 +83,6 @@
 | 编号 | 问题 | 优先级 | 说明 |
 |------|------|--------|------|
 | B-2 | `search_order` 是硬编码模拟 | P1 | tools.py 返回静态数据，无真实业务系统对接 |
-| B-3 | 删除会话存在“先提交 DB、后清理 Redis”风险 | P1 | `chat/router.py` 先 `db.commit()` 再 `session_store.clear()`，Redis 失败时会出现“接口 500 但数据已删除”的不一致 |
 | B-4 | 无用户管理接口 | P2 | 无法列出/禁用/角色变更用户 |
 | B-5 | 无文档详情/预览/下载接口 | P2 | MinIO 上传了文件，但没有下载 API |
 | B-6 | Prompt 模板管理未实现 | P2 | PRD 要求版本化 Prompt 管理，当前 prompt_builder 硬编码 |
@@ -128,10 +127,6 @@
 
 | 编号 | 问题 | 优先级 | 说明 |
 |------|------|--------|------|
-| F-3 | PAGE_PLAN 部分"已知边界"已过时 | P1 | 文档说"没有 GET /users/me"和"没有意图删除接口"，但后端已补充 |
-| F-4 | WebSocket 未就绪时消息可能静默丢失 | P1 | `useWebSocket.sendMessage()` 在连接未 `OPEN` 时直接返回，`ChatPage` 仍会先把用户消息写入本地列表 |
-| F-5 | 普通用户缺少“关闭自己工单”的前端入口 | P1 | 后端允许普通用户关闭自己的工单，但 `TicketDetailPage` 仅 agent/admin 可改状态 |
-| F-6 | CreateTicketDialog 编辑中会被新消息重置 | P1 | 弹窗 `useEffect` 依赖 `messages`，流式消息进入时会覆盖用户正在填写的表单 |
 | F-7 | 无 Toast/Notification 系统 | P2 | 注册成功/失败等场景缺少 Toast 反馈 |
 | F-8 | 无虚拟滚动 | P2 | 长会话消息列表无虚拟化，性能可能有问题 |
 | F-9 | 前端测试为零 | P2 | 无 Vitest/Jest 配置，无组件/Hook 测试 |
@@ -165,7 +160,7 @@
 | `test_rag_service.py` | RAGService | 4 | 好，覆盖普通查询与流式查询 |
 | `test_retriever.py` | HybridRetriever / RRF | 3 | 好，覆盖混合召回主流程 |
 | `test_ticket_service.py` | TicketService | 5 | 好，覆盖权限与去重逻辑 |
-| `test_chat_router.py` | 会话 REST 接口 | 4 | 好，覆盖重命名 / 归档 / 删除 |
+| `test_chat_router.py` | 会话 REST 接口 | 5 | 好，覆盖重命名 / 归档 / 删除 / 回滚 |
 | `test_conversation_repo.py` | ConversationRepo | 2 | 基础覆盖，验证删除清理逻辑 |
 
 ### 4.2 测试缺口（按优先级）
@@ -220,7 +215,7 @@
 | 知识检索问答端到端 | **已实现** | — |
 | 6 类意图识别 | **已实现** | — |
 | 5 条路由链路 | **已实现** | — |
-| WebSocket 流式 + 取消 + 心跳 | **已实现** | 前端仍有“连接未就绪时消息可能静默丢失”的交互缺口 |
+| WebSocket 流式 + 取消 + 心跳 | **已实现** | — |
 | 工单自动创建 + 去重 + 状态跟踪 | **已实现** | — |
 | 按文档来源/时间/标签过滤 | **未实现** | RAG 检索不支持元数据过滤 |
 | Prompt 模板版本化管理 | **未实现** | prompt_builder 硬编码 |
@@ -252,8 +247,8 @@
 6. [x] **添加会话管理接口** — 已实现重命名、删除、归档
 7. [x] **ChatPage 组件拆分** — 已拆为独立聊天组件
 8. [x] **添加工单创建弹窗** — 已在聊天页 InfoPanel 中接入 CreateTicketDialog
-9. **修复聊天/工单页已知交互问题** — WebSocket 未连接发送保护、普通用户关闭工单入口、CreateTicketDialog 表单状态保持
-10. **更新 PAGE_PLAN 已知边界** — 移除已解决的条目（auth/me、意图删除等）
+9. [x] **修复聊天/工单页已知交互问题** — 已补上 WebSocket 未连接发送保护、普通用户关闭工单入口、CreateTicketDialog 表单状态保持
+10. [x] **更新 PAGE_PLAN 已知边界** — 已移除过时条目并同步现有接口能力
 11. **CI/CD Pipeline** — GitHub Actions：lint + test + build
 12. **补充集成测试** — 路由端点、Repository 层
 13. **补充前端测试** — `useWebSocket`、CreateTicketDialog、TicketDetailPage 权限分支
@@ -290,8 +285,7 @@
 |------|------|------|
 | LangGraph 依赖未使用 | 包体积 | 从 pyproject.toml 移除，或替换自建 AgentGraph |
 | `search_order` 硬编码模拟 | 功能不完整 | 抽象为 Tool Protocol，注册真实实现 |
-| 会话删除先提交数据库再清理 Redis | 状态不一致 | 将 Redis 清理纳入更可控的失败处理，避免“已删成功但接口报错” |
-| WebSocket 发送未做排队/未连接保护 | 用户体验回退 | 在前端增加连接状态保护、重试或消息队列 |
+| WebSocket 发送未做排队/自动重试 | 网络波动时体验仍可提升 | 当前已补未连接保护，后续可增加消息队列或自动重试 |
 | `re` 内联 import (tools.py:71) | 代码规范 | 移到文件顶部 |
 | PRD 写 Vue 3 前端，实际用 React | 文档偏差 | 更新 PRD 前端选型章节 |
 | 模块级单例 (`llm_client`, `bm25_index`) | 测试困难 | 改为依赖注入 |

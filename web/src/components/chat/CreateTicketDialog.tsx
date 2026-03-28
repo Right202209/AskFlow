@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import * as ticketService from "@/services/ticket";
@@ -57,19 +57,31 @@ export function CreateTicketDialog({
   const [priority, setPriority] = useState<TicketPriority>("medium");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const previousOpenRef = useRef(false);
+  const previousConversationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    const opened = open && !previousOpenRef.current;
+    const conversationChanged =
+      open &&
+      previousOpenRef.current &&
+      previousConversationIdRef.current !== conversationId;
 
-    const lastUserMessage =
-      [...messages].reverse().find((message) => message.role === "user")?.content ?? null;
+    if (opened || conversationChanged) {
+      const lastUserMessage =
+        [...messages].reverse().find((message) => message.role === "user")?.content ?? null;
 
-    setTitle(buildDefaultTitle(conversationTitle, lastUserMessage));
-    setType(buildDefaultType(intentLabel));
-    setDescription(lastUserMessage ?? "");
-    setPriority("medium");
-    setError("");
-  }, [open, conversationTitle, intentLabel, messages]);
+      setTitle(buildDefaultTitle(conversationTitle, lastUserMessage));
+      setType(buildDefaultType(intentLabel));
+      setDescription(lastUserMessage ?? "");
+      setPriority("medium");
+      setSubmitting(false);
+      setError("");
+    }
+
+    previousOpenRef.current = open;
+    previousConversationIdRef.current = conversationId;
+  }, [open, conversationId, conversationTitle, intentLabel, messages]);
 
   if (!open) return null;
 

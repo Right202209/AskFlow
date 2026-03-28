@@ -128,8 +128,19 @@ async def delete_conversation(
     deleted = await repo.delete(conversation_id)
     if not deleted:
         raise NotFoundError("Conversation not found")
-    await db.commit()
-    await session_store.clear(str(conversation_id))
+
+    try:
+        await session_store.clear(str(conversation_id))
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.exception(
+            "conversation_delete_failed",
+            conversation_id=str(conversation_id),
+            user_id=str(user.id),
+        )
+        raise
+
     return APIResponse(data=DeleteConversationResponse(deleted=True))
 
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
 import type { ClientMessage, ServerMessage } from "@/types/chat";
@@ -7,12 +7,17 @@ const HEARTBEAT_INTERVAL = 30_000;
 const RECONNECT_BASE_DELAY = 1_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 
+type ConnectionState = "idle" | "connecting" | "reconnecting" | "open";
+
 export function useWebSocket() {
   const token = useAuthStore((s) => s.token);
   const appendToken = useChatStore((s) => s.appendToken);
   const finalizeMessage = useChatStore((s) => s.finalizeMessage);
   const setIntent = useChatStore((s) => s.setIntent);
   const setSources = useChatStore((s) => s.setSources);
+  const [connectionState, setConnectionState] = useState<ConnectionState>(
+    token ? "connecting" : "idle",
+  );
 
   const wsRef = useRef<WebSocket | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -69,6 +74,7 @@ export function useWebSocket() {
   const connect = useCallback(() => {
     if (!token) return;
 
+    setConnectionState(reconnectAttempts.current > 0 ? "reconnecting" : "connecting");
     clearTimers();
     disposeSocket(wsRef.current);
     wsRef.current = null;
@@ -84,6 +90,7 @@ export function useWebSocket() {
       }
 
       reconnectAttempts.current = 0;
+      setConnectionState("open");
       heartbeatRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
           const ping: ClientMessage = { type: "ping", timestamp: Date.now() };
@@ -128,10 +135,14 @@ export function useWebSocket() {
         clearInterval(heartbeatRef.current);
         heartbeatRef.current = undefined;
       }
-      if (!shouldReconnectRef.current || reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) return;
+      if (!shouldReconnectRef.current || reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+        setConnectionState("idle");
+        return;
+      }
 
       const delay = RECONNECT_BASE_DELAY * Math.pow(2, reconnectAttempts.current);
       reconnectAttempts.current++;
+      setConnectionState("reconnecting");
       reconnectTimerRef.current = setTimeout(() => {
         reconnectTimerRef.current = undefined;
         connect();
@@ -143,11 +154,13 @@ export function useWebSocket() {
     if (!token) {
       shouldReconnectRef.current = false;
       reconnectAttempts.current = 0;
+      setConnectionState("idle");
       cleanup();
       return;
     }
 
     shouldReconnectRef.current = true;
+    setConnectionState("connecting");
     connectTimerRef.current = setTimeout(() => {
       connectTimerRef.current = undefined;
       connect();
@@ -156,21 +169,25 @@ export function useWebSocket() {
     return () => {
       shouldReconnectRef.current = false;
       reconnectAttempts.current = 0;
+      setConnectionState("idle");
       cleanup();
     };
   }, [token, connect, cleanup]);
 
   const sendMessage = useCallback((conversationId: string, content: string) => {
     conversationIdRef.current = conversationId;
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const msg: ClientMessage = {
-        type: "message",
-        conversation_id: conversationId,
-        content,
-        timestamp: Date.now(),
-      };
-      wsRef.current.send(JSON.stringify(msg));
+    if (wsRef.current?.readyState !== WebSocket.OPEN) {
+      return false;
     }
+
+    const msg: ClientMessage = {
+      type: "message",
+      conversation_id: conversationId,
+      content,
+      timestamp: Date.now(),
+    };
+    wsRef.current.send(JSON.stringify(msg));
+    return true;
   }, []);
 
   const cancelGeneration = useCallback(() => {
@@ -180,7 +197,7 @@ export function useWebSocket() {
     }
   }, []);
 
-  const isConnected = wsRef.current?.readyState === WebSocket.OPEN;
+  const isConnected = connectionState === "open";
 
-  return { sendMessage, cancelGeneration, isConnected };
+  return { sendMessage, cancelGeneration, isConnected, connectionState };
 }
