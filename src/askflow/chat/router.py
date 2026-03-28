@@ -9,19 +9,30 @@ from askflow.agent.service import get_agent_service
 from askflow.repositories.ticket_repo import TicketRepo
 from askflow.ticket.service import TicketService
 from askflow.chat.manager import manager
-from askflow.chat.protocol import ClientMessage, ClientMessageType, ServerMessage, ServerMessageType
+from askflow.chat.protocol import (
+    ClientMessage,
+    ClientMessageType,
+    ServerMessage,
+    ServerMessageType,
+)
 from askflow.chat.session import session_store
 from askflow.core.auth import get_current_user
 from askflow.core.database import get_db
 from askflow.core.exceptions import NotFoundError
 from askflow.core.logging import get_logger
 from askflow.core.rate_limiter import check_rate_limit
+from askflow.models.conversation import ConversationStatus
 from askflow.models.message import MessageRole
 from askflow.models.user import User
 from askflow.repositories.conversation_repo import ConversationRepo
 from askflow.repositories.message_repo import MessageRepo
 from askflow.schemas.common import APIResponse
-from askflow.schemas.conversation import ConversationCreate, ConversationResponse
+from askflow.schemas.conversation import (
+    DeleteConversationResponse,
+    ConversationCreate,
+    ConversationRename,
+    ConversationResponse,
+)
 from askflow.schemas.message import MessageResponse
 
 logger = get_logger(__name__)
@@ -29,6 +40,15 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 _cancel_flags: dict[str, bool] = {}
+
+
+async def _get_user_conversation(
+    repo: ConversationRepo, conversation_id: uuid.UUID, user_id: uuid.UUID
+):
+    conversation = await repo.get_by_id_for_user(conversation_id, user_id)
+    if conversation is None:
+        raise NotFoundError("Conversation not found")
+    return conversation
 
 
 @router.post("/conversations", response_model=APIResponse[ConversationResponse])
@@ -42,7 +62,10 @@ async def create_conversation(
     return APIResponse(data=ConversationResponse.model_validate(conv))
 
 
-@router.get("/conversations", response_model=APIResponse[list[ConversationResponse]])
+@router.get(
+    "/conversations",
+    response_model=APIResponse[list[ConversationResponse]],
+)
 async def list_conversations(
     limit: int = 20,
     offset: int = 0,
@@ -52,6 +75,62 @@ async def list_conversations(
     repo = ConversationRepo(db)
     conversations = await repo.list_by_user(user.id, limit=limit, offset=offset)
     return APIResponse(data=[ConversationResponse.model_validate(c) for c in conversations])
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=APIResponse[ConversationResponse],
+)
+async def rename_conversation(
+    conversation_id: uuid.UUID,
+    body: ConversationRename,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    repo = ConversationRepo(db)
+    await _get_user_conversation(repo, conversation_id, user.id)
+    conversation = await repo.update_title(conversation_id, body.title)
+    if conversation is None:
+        raise NotFoundError("Conversation not found")
+    await db.commit()
+    return APIResponse(data=ConversationResponse.model_validate(conversation))
+
+
+@router.post(
+    "/conversations/{conversation_id}/archive",
+    response_model=APIResponse[ConversationResponse],
+)
+async def archive_conversation(
+    conversation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    repo = ConversationRepo(db)
+    await _get_user_conversation(repo, conversation_id, user.id)
+    conversation = await repo.update_status(conversation_id, ConversationStatus.closed)
+    if conversation is None:
+        raise NotFoundError("Conversation not found")
+    await db.commit()
+    return APIResponse(data=ConversationResponse.model_validate(conversation))
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    response_model=APIResponse[DeleteConversationResponse],
+)
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    repo = ConversationRepo(db)
+    await _get_user_conversation(repo, conversation_id, user.id)
+    deleted = await repo.delete(conversation_id)
+    if not deleted:
+        raise NotFoundError("Conversation not found")
+    await db.commit()
+    await session_store.clear(str(conversation_id))
+    return APIResponse(data=DeleteConversationResponse(deleted=True))
 
 
 @router.get(
@@ -64,9 +143,7 @@ async def get_messages(
     user: User = Depends(get_current_user),
 ):
     conv_repo = ConversationRepo(db)
-    conversation = await conv_repo.get_by_id(conversation_id)
-    if conversation is None or conversation.user_id != user.id:
-        raise NotFoundError("Conversation not found")
+    await _get_user_conversation(conv_repo, conversation_id, user.id)
 
     repo = MessageRepo(db)
     messages = await repo.list_by_conversation(conversation_id)

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Loader2 } from "lucide-react";
-import { useTicketStore } from "@/stores/ticketStore";
 import { cn } from "@/lib/utils";
+import { useTicketStore } from "@/stores/ticketStore";
 import type { TicketStatus } from "@/types/ticket";
 
 const STATUS_LABELS: Record<TicketStatus, string> = {
@@ -35,38 +35,35 @@ export function TicketsPage() {
     fetchTickets();
   }, [fetchTickets]);
 
-  const filtered = filter === "all"
-    ? tickets
-    : tickets.filter((t) => t.status === filter);
+  const filteredTickets =
+    filter === "all" ? tickets : tickets.filter((ticket) => ticket.status === filter);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-6">
       <h1 className="text-xl font-semibold">我的工单</h1>
 
-      {/* Filters */}
       <div className="flex gap-1">
-        {FILTERS.map((f) => (
+        {FILTERS.map((filterOption) => (
           <button
-            key={f.value}
-            onClick={() => setFilter(f.value)}
+            key={filterOption.value}
+            onClick={() => setFilter(filterOption.value)}
             className={cn(
               "rounded-md px-3 py-1.5 text-sm transition-colors",
-              filter === f.value
+              filter === filterOption.value
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent",
             )}
           >
-            {f.label}
+            {filterOption.label}
           </button>
         ))}
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filteredTickets.length === 0 ? (
         <p className="py-20 text-center text-sm text-muted-foreground">暂无工单</p>
       ) : (
         <div className="overflow-auto rounded-lg border">
@@ -81,8 +78,11 @@ export function TicketsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((ticket) => (
-                <tr key={ticket.id} className="border-b transition-colors hover:bg-muted/50">
+              {filteredTickets.map((ticket) => (
+                <tr
+                  key={ticket.id}
+                  className="border-b transition-colors hover:bg-muted/50"
+                >
                   <td className="px-4 py-3">
                     <Link
                       to={`/app/tickets/${ticket.id}`}
@@ -91,15 +91,20 @@ export function TicketsPage() {
                       {ticket.title}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{ticket.ticket_type}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{ticket.type}</td>
                   <td className="px-4 py-3">
-                    <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[ticket.status])}>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium",
+                        STATUS_COLORS[ticket.status],
+                      )}
+                    >
                       {STATUS_LABELS[ticket.status]}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{ticket.priority}</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {new Date(ticket.created_at).toLocaleDateString()}
+                    {new Date(ticket.created_at).toLocaleDateString("zh-CN")}
                   </td>
                 </tr>
               ))}

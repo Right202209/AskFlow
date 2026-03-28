@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { useTicketStore } from "@/stores/ticketStore";
-import { useAuthStore } from "@/stores/authStore";
-import * as ticketService from "@/services/ticket";
 import { cn } from "@/lib/utils";
+import * as ticketService from "@/services/ticket";
+import { useAuthStore } from "@/stores/authStore";
+import { useTicketStore } from "@/stores/ticketStore";
 import type { TicketStatus } from "@/types/ticket";
 
 const STATUS_OPTIONS: Array<{ label: string; value: TicketStatus }> = [
@@ -18,7 +18,7 @@ export function TicketDetailPage() {
   const { ticketId } = useParams();
   const navigate = useNavigate();
   const { currentTicket, isLoading, fetchTicket, clearCurrent } = useTicketStore();
-  const role = useAuthStore((s) => s.role);
+  const role = useAuthStore((state) => state.role);
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
@@ -30,10 +30,11 @@ export function TicketDetailPage() {
 
   const handleStatusChange = async (status: TicketStatus) => {
     if (!ticketId || !currentTicket) return;
+
     setUpdating(true);
     try {
       await ticketService.updateTicket(ticketId, { status });
-      fetchTicket(ticketId);
+      await fetchTicket(ticketId);
     } finally {
       setUpdating(false);
     }
@@ -48,7 +49,7 @@ export function TicketDetailPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate("/app/tickets")}
@@ -60,22 +61,23 @@ export function TicketDetailPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Main info */}
         <div className="space-y-4 lg:col-span-2">
-          <div className="rounded-lg border p-4 space-y-3">
+          <div className="space-y-3 rounded-lg border p-4">
             <div>
               <span className="text-xs font-medium text-muted-foreground">类型</span>
-              <p className="text-sm">{currentTicket.ticket_type}</p>
+              <p className="text-sm">{currentTicket.type}</p>
             </div>
             <div>
               <span className="text-xs font-medium text-muted-foreground">描述</span>
-              <p className="whitespace-pre-wrap text-sm">{currentTicket.content}</p>
+              <p className="whitespace-pre-wrap text-sm">
+                {currentTicket.description || "暂无描述"}
+              </p>
             </div>
-            {currentTicket.extra && Object.keys(currentTicket.extra).length > 0 && (
+            {currentTicket.content && Object.keys(currentTicket.content).length > 0 && (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">附加信息</span>
-                <pre className="mt-1 rounded bg-muted p-2 text-xs overflow-auto">
-                  {JSON.stringify(currentTicket.extra, null, 2)}
+                <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-xs">
+                  {JSON.stringify(currentTicket.content, null, 2)}
                 </pre>
               </div>
             )}
@@ -93,30 +95,34 @@ export function TicketDetailPage() {
           </div>
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-4">
-          <div className="rounded-lg border p-4 space-y-3">
+          <div className="space-y-3 rounded-lg border p-4">
             <div>
               <span className="text-xs font-medium text-muted-foreground">状态</span>
               {canEdit ? (
                 <select
                   value={currentTicket.status}
-                  onChange={(e) => handleStatusChange(e.target.value as TicketStatus)}
+                  onChange={(event) => handleStatusChange(event.target.value as TicketStatus)}
                   disabled={updating}
                   className="mt-1 flex h-9 w-full rounded-md border bg-transparent px-3 text-sm"
                 >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  {STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
               ) : (
-                <p className={cn("mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-                  currentTicket.status === "pending" && "bg-yellow-100 text-yellow-800",
-                  currentTicket.status === "processing" && "bg-blue-100 text-blue-800",
-                  currentTicket.status === "resolved" && "bg-green-100 text-green-800",
-                  currentTicket.status === "closed" && "bg-gray-100 text-gray-800",
-                )}>
-                  {STATUS_OPTIONS.find((o) => o.value === currentTicket.status)?.label}
+                <p
+                  className={cn(
+                    "mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                    currentTicket.status === "pending" && "bg-yellow-100 text-yellow-800",
+                    currentTicket.status === "processing" && "bg-blue-100 text-blue-800",
+                    currentTicket.status === "resolved" && "bg-green-100 text-green-800",
+                    currentTicket.status === "closed" && "bg-gray-100 text-gray-800",
+                  )}
+                >
+                  {STATUS_OPTIONS.find((option) => option.value === currentTicket.status)?.label}
                 </p>
               )}
             </div>
@@ -125,12 +131,22 @@ export function TicketDetailPage() {
               <p className="text-sm">{currentTicket.priority}</p>
             </div>
             <div>
-              <span className="text-xs font-medium text-muted-foreground">创建时间</span>
-              <p className="text-sm">{new Date(currentTicket.created_at).toLocaleString()}</p>
+              <span className="text-xs font-medium text-muted-foreground">指派人</span>
+              <p className="text-sm">{currentTicket.assignee || "未指派"}</p>
             </div>
             <div>
-              <span className="text-xs font-medium text-muted-foreground">更新时间</span>
-              <p className="text-sm">{new Date(currentTicket.updated_at).toLocaleString()}</p>
+              <span className="text-xs font-medium text-muted-foreground">创建时间</span>
+              <p className="text-sm">
+                {new Date(currentTicket.created_at).toLocaleString("zh-CN")}
+              </p>
+            </div>
+            <div>
+              <span className="text-xs font-medium text-muted-foreground">解决时间</span>
+              <p className="text-sm">
+                {currentTicket.resolved_at
+                  ? new Date(currentTicket.resolved_at).toLocaleString("zh-CN")
+                  : "未解决"}
+              </p>
             </div>
           </div>
         </div>

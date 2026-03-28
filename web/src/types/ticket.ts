@@ -5,26 +5,29 @@ export interface Ticket {
   id: string;
   user_id: string;
   title: string;
-  ticket_type: string;
-  content: string;
+  type: string;
+  description: string | null;
+  assignee: string | null;
+  content: Record<string, unknown> | null;
   priority: TicketPriority;
   status: TicketStatus;
   conversation_id: string | null;
-  extra: Record<string, unknown> | null;
   created_at: string;
-  updated_at: string;
+  resolved_at: string | null;
 }
 
 export interface CreateTicketRequest {
   title: string;
-  ticket_type: string;
-  content: string;
+  type: string;
+  description?: string;
   priority: TicketPriority;
   conversation_id?: string;
-  extra?: Record<string, unknown>;
+  content?: Record<string, unknown>;
 }
 
 export interface UpdateTicketRequest {
   status?: TicketStatus;
+  assignee?: string;
   priority?: TicketPriority;
+  content?: Record<string, unknown>;
 }

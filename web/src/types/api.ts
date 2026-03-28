@@ -5,8 +5,10 @@ export interface APIResponse<T> {
 }
 
 export interface PaginatedResponse<T> {
-  items: T[];
+  success: boolean;
+  data: T[];
   total: number;
   page: number;
   limit: number;
+  error: string | null;
 }

@@ -3,11 +3,19 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ConversationCreate(BaseModel):
     title: str | None = None
+
+
+class ConversationRename(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+
+
+class DeleteConversationResponse(BaseModel):
+    deleted: bool
 
 
 class ConversationResponse(BaseModel):
