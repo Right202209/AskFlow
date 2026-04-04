@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Seed the database with initial data."""
+
 import asyncio
 import sys
 import os
+
+from sqlalchemy import inspect, text
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from askflow.core.database import async_session_factory, engine
 from askflow.core.security import hash_password
-from askflow.models import Base, UserRole
+from askflow.models import UserRole
 
 
 INTENT_SEEDS = [
@@ -76,11 +79,24 @@ INTENT_SEEDS = [
 
 
 async def seed():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    async with engine.connect() as conn:
+        has_alembic_version = await conn.run_sync(
+            lambda sync_conn: inspect(sync_conn).has_table("alembic_version")
+        )
+        if not has_alembic_version:
+            raise RuntimeError("Database is not initialized. Run 'make migrate' first.")
+
+        version = (
+            await conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+        ).scalar_one_or_none()
+        if version is None:
+            raise RuntimeError(
+                "Database schema exists but is not tracked by Alembic. Run 'alembic stamp head' or recreate the database."
+            )
 
     async with async_session_factory() as session:
         from askflow.repositories.user_repo import UserRepo
+
         repo = UserRepo(session)
 
         existing = await repo.get_by_username("admin")
@@ -104,6 +120,7 @@ async def seed():
             print("Created test user (user1 / user123)")
 
         from askflow.repositories.intent_config_repo import IntentConfigRepo
+
         intent_repo = IntentConfigRepo(session)
         for seed in INTENT_SEEDS:
             existing = await intent_repo.get_by_name(seed["name"])

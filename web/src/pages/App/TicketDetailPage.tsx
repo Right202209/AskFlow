@@ -17,11 +17,12 @@ const STATUS_OPTIONS: Array<{ label: string; value: TicketStatus }> = [
 export function TicketDetailPage() {
   const { ticketId } = useParams();
   const navigate = useNavigate();
-  const { currentTicket, isLoading, fetchTicket, clearCurrent } = useTicketStore();
-  const { role, userId } = useAuthStore((state) => ({
-    role: state.role,
-    userId: state.userId,
-  }));
+  const currentTicket = useTicketStore((state) => state.currentTicket);
+  const isLoading = useTicketStore((state) => state.isLoading);
+  const fetchTicket = useTicketStore((state) => state.fetchTicket);
+  const clearCurrent = useTicketStore((state) => state.clearCurrent);
+  const role = useAuthStore((state) => state.role);
+  const userId = useAuthStore((state) => state.userId);
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {

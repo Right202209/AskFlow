@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { decodeToken, isTokenExpired } from "@/services/jwt";
+import { decodeToken } from "@/services/jwt";
 
 interface AuthState {
   token: string | null;
@@ -10,12 +10,11 @@ interface AuthState {
 
   login: (token: string, username: string) => void;
   logout: () => void;
-  isAuthenticated: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       token: null,
       username: null,
       role: null,
@@ -33,12 +32,6 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         set({ token: null, username: null, role: null, userId: null });
-      },
-
-      isAuthenticated: () => {
-        const { token } = get();
-        if (!token) return false;
-        return !isTokenExpired(token);
       },
     }),
     { name: "askflow-auth" },

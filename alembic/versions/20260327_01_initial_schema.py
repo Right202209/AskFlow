@@ -18,12 +18,22 @@ branch_labels: Sequence[str] | None = None
 depends_on: Sequence[str] | None = None
 
 
-user_role = sa.Enum("user", "agent", "admin", name="user_role")
-conversation_status = sa.Enum("active", "closed", "transferred", name="conversation_status")
-message_role = sa.Enum("user", "assistant", "system", name="message_role")
-ticket_status = sa.Enum("pending", "processing", "resolved", "closed", name="ticket_status")
-ticket_priority = sa.Enum("low", "medium", "high", "urgent", name="ticket_priority")
-document_status = sa.Enum("indexing", "active", "archived", name="document_status")
+user_role = postgresql.ENUM("user", "agent", "admin", name="user_role", create_type=False)
+conversation_status = postgresql.ENUM(
+    "active", "closed", "transferred", name="conversation_status", create_type=False
+)
+message_role = postgresql.ENUM(
+    "user", "assistant", "system", name="message_role", create_type=False
+)
+ticket_status = postgresql.ENUM(
+    "pending", "processing", "resolved", "closed", name="ticket_status", create_type=False
+)
+ticket_priority = postgresql.ENUM(
+    "low", "medium", "high", "urgent", name="ticket_priority", create_type=False
+)
+document_status = postgresql.ENUM(
+    "indexing", "active", "archived", name="document_status", create_type=False
+)
 
 
 def upgrade() -> None:
