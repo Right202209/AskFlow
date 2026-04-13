@@ -64,7 +64,12 @@ FastAPI API
 | `docs/` | 项目文档、状态、审计 |
 | `web/docs/` | 前端规划与实现文档 |
 
-更完整的目录说明见 [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)。
+## 文档索引
+
+- [项目结构文档](docs/PROJECT_STRUCTURE.md)
+- [系统使用流程指南](docs/USAGE_GUIDE_zh.md)
+- [前端规划与实现](web/docs/README.md)
+- [项目状态与待办](docs/status/PROJECT_STATUS.md)
 
 ## 快速开始
 

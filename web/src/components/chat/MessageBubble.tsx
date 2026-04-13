@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { AlertCircle, FileText } from "lucide-react";
 import type { Message, Source } from "@/types/chat";
@@ -19,11 +20,13 @@ function renderContent(content: string) {
     const excerpts: { id: string; title: string; text: string }[] = [];
     let match;
     while ((match = regex.exec(remaining)) !== null) {
-      excerpts.push({
-        id: match[1],
-        title: match[2],
-        text: match[3].trim()
-      });
+      if (match[1] && match[2] && match[3]) {
+        excerpts.push({
+          id: match[1],
+          title: match[2],
+          text: match[3].trim()
+        });
+      }
     }
 
     if (excerpts.length > 0) {
@@ -54,13 +57,15 @@ function renderContent(content: string) {
   return <p className="whitespace-pre-wrap">{content}</p>;
 }
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   role,
   content,
   sources,
   isStreaming = false,
 }: MessageBubbleProps) {
   const isUser = role === "user";
+
+  const renderedContent = useMemo(() => renderContent(content), [content]);
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -70,7 +75,7 @@ export function MessageBubble({
           isUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
         )}
       >
-        {renderContent(content)}
+        {renderedContent}
         
         {isStreaming && (
           <span className="inline-block h-4 w-1 animate-pulse bg-current mt-1" />
@@ -95,4 +100,4 @@ export function MessageBubble({
       </div>
     </div>
   );
-}
+});
