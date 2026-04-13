@@ -16,6 +16,12 @@ export function MessageList({
   isLoading,
   endRef,
 }: MessageListProps) {
+  const isAILoading =
+    !isLoading &&
+    messages.length > 0 &&
+    messages[messages.length - 1]?.role === "user" &&
+    !streamingTokens;
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-20">
@@ -53,6 +59,16 @@ export function MessageList({
           content={streamingTokens}
           isStreaming
         />
+      )}
+      {isAILoading && (
+        <div className="flex px-4 py-3 opacity-50">
+          <div className="flex h-8 w-8 shrink-0 select-none items-center justify-center rounded-md border bg-primary text-primary-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </div>
+          <div className="ml-4 flex items-center text-sm font-medium">
+            AI 思考中...
+          </div>
+        </div>
       )}
       <div ref={endRef} />
     </>

@@ -146,9 +146,20 @@ class AgentService:
 
         state = await self._graph.run(state, route_map=route_map)
 
+        import asyncio
+
         async def token_iter():
             for token in state.response_tokens:
-                yield token
+                # 如果单个 token 是一整句话，按较小粒度（比如两三个字符）拆分，模拟打字机体验
+                if len(token) > 3:
+                    for i in range(0, len(token), 2):
+                        yield token[i:i+2]
+                        await asyncio.sleep(0.05)
+                else:
+                    yield token
+                    await asyncio.sleep(0.05)
+                # 每句话后面加一个空格或换行
+                yield "\n"
 
         return ProcessResult(
             token_stream=token_iter(),

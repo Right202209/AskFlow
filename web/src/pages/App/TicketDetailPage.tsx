@@ -91,9 +91,22 @@ export function TicketDetailPage() {
             {currentTicket.content && Object.keys(currentTicket.content).length > 0 && (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">附加信息</span>
-                <pre className="mt-1 overflow-auto rounded bg-muted p-2 text-xs">
-                  {JSON.stringify(currentTicket.content, null, 2)}
-                </pre>
+                <div className="mt-1 rounded-md border bg-muted/30 p-3 text-sm flex flex-col gap-2">
+                  {Object.entries(currentTicket.content).map(([key, value]) => (
+                    <div key={key} className="flex flex-col sm:flex-row sm:gap-4 border-b last:border-0 pb-2 last:pb-0">
+                      <span className="font-medium text-muted-foreground sm:w-1/4 shrink-0 capitalize">{key.replace(/_/g, ' ')}</span>
+                      <span className="break-words sm:w-3/4">
+                        {typeof value === "object" ? (
+                          <pre className="whitespace-pre-wrap text-xs bg-muted/50 p-2 rounded">
+                            {JSON.stringify(value, null, 2)}
+                          </pre>
+                        ) : (
+                          String(value)
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {currentTicket.conversation_id && (
