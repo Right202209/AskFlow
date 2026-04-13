@@ -79,6 +79,7 @@ async def delete_document(
     from askflow.embedding.embedder import create_embedder
     from askflow.embedding.service import EmbeddingService
     from askflow.rag.vector_store import get_vector_store
+
     embed_service = EmbeddingService(create_embedder(), get_vector_store())
     await embed_service.delete_document(str(doc_id))
     return APIResponse(data={"deleted": True})
@@ -113,9 +114,7 @@ async def update_intent(
     user: User = Depends(require_role(UserRole.admin)),
 ):
     service = AdminService(db)
-    config = await service.update_intent_config(
-        config_id, **body.model_dump(exclude_unset=True)
-    )
+    config = await service.update_intent_config(config_id, **body.model_dump(exclude_unset=True))
     if not config:
         return APIResponse(success=False, error="Intent config not found")
     return APIResponse(data=IntentConfigResponse.model_validate(config))

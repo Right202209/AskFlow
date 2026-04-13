@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import * as ticketService from "@/services/ticket";
 import { useAuthStore } from "@/stores/authStore";
 import { useTicketStore } from "@/stores/ticketStore";
+import { toastError, toastSuccess } from "@/stores/toastStore";
 import type { TicketStatus } from "@/types/ticket";
 
 const STATUS_OPTIONS: Array<{ label: string; value: TicketStatus }> = [
@@ -43,6 +44,12 @@ export function TicketDetailPage() {
     try {
       await ticketService.updateTicket(ticketId, { status });
       await fetchTicket(ticketId);
+      toastSuccess("工单状态已更新");
+    } catch (error) {
+      toastError(
+        "更新失败",
+        error instanceof Error ? error.message : "更新工单状态时发生错误",
+      );
     } finally {
       setUpdating(false);
     }

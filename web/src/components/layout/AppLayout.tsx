@@ -14,6 +14,7 @@ const allMenuItems = [
   { label: "智能问答", path: "/app/chat", icon: MessageSquare },
   { label: "我的工单", path: "/app/tickets", icon: Ticket },
   { label: "数据看板", path: "/admin/dashboard", icon: BarChart3, roles: ["agent", "admin"] },
+  { label: "工单总览", path: "/admin/tickets", icon: Ticket, roles: ["agent", "admin"] },
   { label: "文档管理", path: "/admin/documents", icon: FileText, roles: ["agent", "admin"] },
   { label: "意图配置", path: "/admin/intents", icon: Settings, roles: ["agent", "admin"] },
 ] as const;

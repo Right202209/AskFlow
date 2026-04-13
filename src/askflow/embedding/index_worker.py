@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 
 from askflow.core.logging import get_logger
 from askflow.embedding.embedder import create_embedder

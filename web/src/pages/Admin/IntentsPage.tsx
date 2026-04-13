@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, Plus, Pencil } from "lucide-react";
 import { useAdminStore } from "@/stores/adminStore";
 import { useAuthStore } from "@/stores/authStore";
+import { toastError, toastSuccess } from "@/stores/toastStore";
 import * as adminService from "@/services/admin";
 import type { IntentConfig, CreateIntentRequest, UpdateIntentRequest } from "@/types/intent";
 
@@ -145,9 +146,12 @@ function IntentFormDialog({
         };
         await adminService.createIntent(data);
       }
+      toastSuccess(isEditing ? "意图已更新" : "意图已创建");
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存失败");
+      const message = err instanceof Error ? err.message : "保存失败";
+      setError(message);
+      toastError("保存失败", message);
     } finally {
       setSaving(false);
     }

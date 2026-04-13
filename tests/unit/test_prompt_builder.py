@@ -1,5 +1,3 @@
-import pytest
-
 from askflow.rag.prompt_builder import build_fallback_response, build_rag_prompt
 from askflow.rag.retriever import RetrievalResult
 

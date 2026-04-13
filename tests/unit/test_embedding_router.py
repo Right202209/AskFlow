@@ -1,16 +1,28 @@
 from __future__ import annotations
 
-import io
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from fastapi import UploadFile
-
 from askflow.embedding.embedder import EmbeddingProviderError
 from askflow.embedding.router import reindex_document, upload_document
 from askflow.models.document import DocumentStatus
+
+
+class FakeUploadFile:
+    def __init__(
+        self,
+        filename: str,
+        content: bytes,
+        content_type: str = "application/octet-stream",
+    ) -> None:
+        self.filename = filename
+        self.content_type = content_type
+        self._content = content
+
+    async def read(self) -> bytes:
+        return self._content
 
 
 async def test_upload_document_cleans_up_failed_index(monkeypatch, admin_user):
@@ -38,7 +50,9 @@ async def test_upload_document_cleans_up_failed_index(monkeypatch, admin_user):
     monkeypatch.setattr("askflow.embedding.router.DocumentRepo", lambda db: repo)
     monkeypatch.setattr("askflow.embedding.router.create_embedder", lambda: object())
     monkeypatch.setattr("askflow.embedding.router.get_vector_store", lambda: object())
-    monkeypatch.setattr("askflow.embedding.router.EmbeddingService", lambda embedder, store: service)
+    monkeypatch.setattr(
+        "askflow.embedding.router.EmbeddingService", lambda embedder, store: service
+    )
 
     stored = []
     deleted = []
@@ -50,10 +64,12 @@ async def test_upload_document_cleans_up_failed_index(monkeypatch, admin_user):
         deleted.append(object_name)
 
     monkeypatch.setattr("askflow.embedding.router.put_document_bytes", fake_put_document_bytes)
-    monkeypatch.setattr("askflow.embedding.router.delete_document_bytes", fake_delete_document_bytes)
+    monkeypatch.setattr(
+        "askflow.embedding.router.delete_document_bytes", fake_delete_document_bytes
+    )
 
     response = await upload_document(
-        file=UploadFile(filename="guide.txt", file=io.BytesIO(b"hello")),
+        file=FakeUploadFile(filename="guide.txt", content=b"hello"),
         title="Guide",
         source=None,
         db=AsyncMock(),
@@ -92,7 +108,9 @@ async def test_reindex_document_uses_stored_source(monkeypatch, admin_user):
     monkeypatch.setattr("askflow.embedding.router.DocumentRepo", lambda db: repo)
     monkeypatch.setattr("askflow.embedding.router.create_embedder", lambda: object())
     monkeypatch.setattr("askflow.embedding.router.get_vector_store", lambda: object())
-    monkeypatch.setattr("askflow.embedding.router.EmbeddingService", lambda embedder, store: service)
+    monkeypatch.setattr(
+        "askflow.embedding.router.EmbeddingService", lambda embedder, store: service
+    )
     monkeypatch.setattr("askflow.embedding.router.get_document_bytes", lambda object_name: b"hello")
 
     response = await reindex_document(doc_id=doc_id, db=AsyncMock(), user=admin_user)

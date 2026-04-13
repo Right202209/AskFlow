@@ -14,3 +14,7 @@ htmlcov/
 *.db
 CLAUDE.md
 .claude
+.codex
+web/tsconfig.tsbuildinfo
+web/dist/
+static/dist/

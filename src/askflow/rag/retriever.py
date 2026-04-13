@@ -65,13 +65,15 @@ class HybridRetriever:
         items = []
         if results and results.get("ids"):
             for i, doc_id in enumerate(results["ids"][0]):
-                items.append(RetrievalResult(
-                    id=doc_id,
-                    document=results["documents"][0][i],
-                    metadata=results["metadatas"][0][i] if results.get("metadatas") else {},
-                    score=1.0 - (results["distances"][0][i] if results.get("distances") else 0),
-                    source="vector",
-                ))
+                items.append(
+                    RetrievalResult(
+                        id=doc_id,
+                        document=results["documents"][0][i],
+                        metadata=results["metadatas"][0][i] if results.get("metadatas") else {},
+                        score=1.0 - (results["distances"][0][i] if results.get("distances") else 0),
+                        source="vector",
+                    )
+                )
         return items
 
     def _bm25_search(self, query: str, top_k: int) -> list[RetrievalResult]:

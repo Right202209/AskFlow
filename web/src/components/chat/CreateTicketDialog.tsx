@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Loader2 } from "lucide-react";
 import * as ticketService from "@/services/ticket";
+import { toastError, toastSuccess } from "@/stores/toastStore";
 import type { Message } from "@/types/chat";
 import type { Ticket, TicketPriority } from "@/types/ticket";
 
@@ -115,9 +116,12 @@ export function CreateTicketDialog({
       });
 
       onClose();
+      toastSuccess("工单创建成功", "已附带当前会话上下文。");
       onCreated(ticket);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "创建工单失败");
+      const message = submitError instanceof Error ? submitError.message : "创建工单失败";
+      setError(message);
+      toastError("创建工单失败", message);
     } finally {
       setSubmitting(false);
     }

@@ -1,6 +1,4 @@
-import pytest
-
-from askflow.agent.intent_classifier import IntentClassifier, KEYWORD_RULES
+from askflow.agent.intent_classifier import IntentClassifier
 from askflow.agent.nodes import route_by_intent
 from askflow.agent.state import AgentState
 from askflow.schemas.intent import IntentResult

@@ -7,6 +7,7 @@ import { CreateTicketDialog } from "@/components/chat/CreateTicketDialog";
 import { MessageList } from "@/components/chat/MessageList";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useChatStore } from "@/stores/chatStore";
+import { toastError, toastSuccess } from "@/stores/toastStore";
 import type { Ticket } from "@/types/ticket";
 
 export function ChatPage() {
@@ -27,12 +28,18 @@ export function ChatPage() {
     fetchConversations,
     selectConversation,
     createConversation,
+    renameConversation,
+    archiveConversation,
+    deleteConversation,
     addUserMessage,
     resetStreaming,
   } = useChatStore();
 
   const [input, setInput] = useState("");
   const [isTicketDialogOpen, setIsTicketDialogOpen] = useState(false);
+  const [pendingConversationActionId, setPendingConversationActionId] = useState<string | null>(
+    null,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,6 +65,73 @@ export function ChatPage() {
   const handleSelectConversation = (id: string) => {
     resetStreaming();
     navigate(`/app/chat/${id}`);
+  };
+
+  const handleRenameConversation = async (id: string) => {
+    const current = conversations.find((conversation) => conversation.id === id);
+    const nextTitle = window.prompt("输入新的会话名称", current?.title ?? "");
+
+    if (nextTitle === null) {
+      return;
+    }
+
+    setPendingConversationActionId(id);
+    try {
+      const trimmed = nextTitle.trim();
+      await renameConversation(id, trimmed ? trimmed : null);
+      toastSuccess("会话已更新");
+    } catch (error) {
+      toastError(
+        "重命名失败",
+        error instanceof Error ? error.message : "更新会话名称时发生错误",
+      );
+    } finally {
+      setPendingConversationActionId(null);
+    }
+  };
+
+  const handleArchiveConversation = async (id: string) => {
+    const confirmed = window.confirm("归档后会话仍会保留，但会标记为已关闭。继续吗？");
+    if (!confirmed) {
+      return;
+    }
+
+    setPendingConversationActionId(id);
+    try {
+      await archiveConversation(id);
+      toastSuccess("会话已归档");
+    } catch (error) {
+      toastError(
+        "归档失败",
+        error instanceof Error ? error.message : "归档会话时发生错误",
+      );
+    } finally {
+      setPendingConversationActionId(null);
+    }
+  };
+
+  const handleDeleteConversation = async (id: string) => {
+    const confirmed = window.confirm("确定删除该会话及其消息记录吗？此操作不可撤销。");
+    if (!confirmed) {
+      return;
+    }
+
+    setPendingConversationActionId(id);
+    try {
+      await deleteConversation(id);
+      resetStreaming();
+      if (currentConversationId === id) {
+        navigate("/app/chat", { replace: true });
+      }
+      toastSuccess("会话已删除");
+    } catch (error) {
+      toastError(
+        "删除失败",
+        error instanceof Error ? error.message : "删除会话时发生错误",
+      );
+    } finally {
+      setPendingConversationActionId(null);
+    }
   };
 
   const handleSend = async () => {
@@ -104,8 +178,12 @@ export function ChatPage() {
           conversations={conversations}
           currentConversationId={currentConversationId}
           isLoading={isLoadingConversations}
+          pendingActionId={pendingConversationActionId}
           onCreate={handleNewConversation}
           onSelect={handleSelectConversation}
+          onRename={handleRenameConversation}
+          onArchive={handleArchiveConversation}
+          onDelete={handleDeleteConversation}
         />
 
         <div className="flex flex-1 flex-col">

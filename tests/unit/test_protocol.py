@@ -1,5 +1,3 @@
-import pytest
-
 from askflow.chat.protocol import ClientMessage, ClientMessageType, ServerMessage, ServerMessageType
 
 

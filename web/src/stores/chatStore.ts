@@ -16,6 +16,9 @@ interface ChatState {
   fetchConversations: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   createConversation: (title?: string) => Promise<Conversation>;
+  renameConversation: (conversationId: string, title: string | null) => Promise<Conversation>;
+  archiveConversation: (conversationId: string) => Promise<Conversation>;
+  deleteConversation: (conversationId: string) => Promise<void>;
   appendToken: (token: string) => void;
   finalizeMessage: (conversationId: string) => void;
   setIntent: (intent: { label: string; confidence: number } | null) => void;
@@ -67,6 +70,41 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       currentConversationId: conv.id,
     }));
     return conv;
+  },
+
+  renameConversation: async (conversationId, title) => {
+    const conversation = await chatService.renameConversation(conversationId, title);
+    set((state) => ({
+      conversations: state.conversations.map((item) =>
+        item.id === conversationId ? conversation : item,
+      ),
+    }));
+    return conversation;
+  },
+
+  archiveConversation: async (conversationId) => {
+    const conversation = await chatService.archiveConversation(conversationId);
+    set((state) => ({
+      conversations: state.conversations.map((item) =>
+        item.id === conversationId ? conversation : item,
+      ),
+    }));
+    return conversation;
+  },
+
+  deleteConversation: async (conversationId) => {
+    await chatService.deleteConversation(conversationId);
+    set((state) => {
+      const nextMessages = { ...state.messages };
+      delete nextMessages[conversationId];
+
+      return {
+        conversations: state.conversations.filter((item) => item.id !== conversationId),
+        messages: nextMessages,
+        currentConversationId:
+          state.currentConversationId === conversationId ? null : state.currentConversationId,
+      };
+    });
   },
 
   addUserMessage: (conversationId, content) => {

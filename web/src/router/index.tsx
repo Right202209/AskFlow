@@ -9,6 +9,7 @@ import { TicketDetailPage } from "@/pages/App/TicketDetailPage";
 import { DashboardPage } from "@/pages/Admin/DashboardPage";
 import { DocumentsPage } from "@/pages/Admin/DocumentsPage";
 import { IntentsPage } from "@/pages/Admin/IntentsPage";
+import { TicketsOverviewPage } from "@/pages/Admin/TicketsOverviewPage";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
         element: <RequireRole roles={["agent", "admin"]} />,
         children: [
           { path: "/admin/dashboard", element: <DashboardPage /> },
+          { path: "/admin/tickets", element: <TicketsOverviewPage /> },
           { path: "/admin/documents", element: <DocumentsPage /> },
           { path: "/admin/intents", element: <IntentsPage /> },
         ],

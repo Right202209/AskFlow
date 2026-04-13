@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import * as authService from "@/services/auth";
+import { toastError, toastSuccess } from "@/stores/toastStore";
 
 export function RegisterPage() {
   const [username, setUsername] = useState("");
@@ -17,15 +18,19 @@ export function RegisterPage() {
 
     if (password !== confirmPassword) {
       setError("两次输入的密码不一致");
+      toastError("注册失败", "两次输入的密码不一致");
       return;
     }
 
     setIsLoading(true);
     try {
       await authService.register({ username, email, password });
+      toastSuccess("注册成功", "请使用新账号登录。");
       navigate("/login");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "注册失败");
+      const message = err instanceof Error ? err.message : "注册失败";
+      setError(message);
+      toastError("注册失败", message);
     } finally {
       setIsLoading(false);
     }

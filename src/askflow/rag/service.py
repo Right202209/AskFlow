@@ -4,13 +4,11 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from askflow.core.logging import get_logger
-from askflow.core.metrics import RAG_QUERY_COUNT, RAG_QUERY_LATENCY
-from askflow.embedding.embedder import Embedder
+from askflow.core.metrics import RAG_QUERY_COUNT
 from askflow.rag.llm_client import LLMClient
 from askflow.rag.prompt_builder import build_fallback_response, build_rag_prompt
 from askflow.rag.reranker import Reranker
-from askflow.rag.retriever import HybridRetriever, RetrievalResult
-from askflow.rag.vector_store import VectorStore
+from askflow.rag.retriever import HybridRetriever
 
 logger = get_logger(__name__)
 

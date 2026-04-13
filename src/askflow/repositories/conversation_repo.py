@@ -46,9 +46,7 @@ class ConversationRepo:
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_title(
-        self, conv_id: uuid.UUID, title: str | None
-    ) -> Conversation | None:
+    async def update_title(self, conv_id: uuid.UUID, title: str | None) -> Conversation | None:
         conv = await self.get_by_id(conv_id)
         if conv:
             conv.title = title
@@ -72,13 +70,9 @@ class ConversationRepo:
             return False
 
         await self._db.execute(
-            update(Ticket)
-            .where(Ticket.conversation_id == conv_id)
-            .values(conversation_id=None)
+            update(Ticket).where(Ticket.conversation_id == conv_id).values(conversation_id=None)
         )
-        await self._db.execute(
-            delete(Message).where(Message.conversation_id == conv_id)
-        )
+        await self._db.execute(delete(Message).where(Message.conversation_id == conv_id))
         await self._db.delete(conv)
         await self._db.flush()
         return True

@@ -1,5 +1,3 @@
-import pytest
-
 from askflow.config import Settings
 
 
@@ -12,7 +10,7 @@ class TestConfig:
         assert s.app_name == "AskFlow"
         assert s.rate_limit_per_minute == 60
         assert s.jwt_algorithm == "HS256"
-        assert s.embedding_provider == "local"
+        assert s.embedding_provider == "api"
 
     def test_custom_values(self):
         s = Settings(

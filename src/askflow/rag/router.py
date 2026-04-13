@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.core.auth import get_current_user
-from askflow.core.database import get_db
 from askflow.embedding.embedder import create_embedder
 from askflow.models.user import User
 from askflow.rag.llm_client import llm_client

@@ -34,18 +34,18 @@ class BM25Index:
             return []
         tokenized_query = list(jieba.cut(query))
         scores = self._bm25.get_scores(tokenized_query)
-        scored = sorted(
-            zip(range(len(scores)), scores), key=lambda x: x[1], reverse=True
-        )[:top_k]
+        scored = sorted(zip(range(len(scores)), scores), key=lambda x: x[1], reverse=True)[:top_k]
         results = []
         for idx, score in scored:
             if score > 0:
-                results.append({
-                    "id": self._ids[idx],
-                    "document": self._corpus[idx],
-                    "metadata": self._metadatas[idx],
-                    "score": float(score),
-                })
+                results.append(
+                    {
+                        "id": self._ids[idx],
+                        "document": self._corpus[idx],
+                        "metadata": self._metadatas[idx],
+                        "score": float(score),
+                    }
+                )
         return results
 
     @property

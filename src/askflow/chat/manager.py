@@ -38,9 +38,7 @@ class ConnectionManager:
         for conn_id in self._user_connections.get(user_id, set()):
             await self.send(conn_id, message)
 
-    async def broadcast_token(
-        self, connection_id: str, conversation_id: str, token: str
-    ) -> None:
+    async def broadcast_token(self, connection_id: str, conversation_id: str, token: str) -> None:
         await self.send(
             connection_id,
             ServerMessage(

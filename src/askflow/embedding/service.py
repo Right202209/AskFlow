@@ -37,8 +37,7 @@ class EmbeddingService:
         ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
         # 这些元数据会在检索命中和前端来源展示时继续沿用。
         metadatas = [
-            {"doc_id": doc_id, "title": title, "chunk_index": i}
-            for i in range(len(chunks))
+            {"doc_id": doc_id, "title": title, "chunk_index": i} for i in range(len(chunks))
         ]
         # 只有在解析和向量化都成功后，才替换旧分块，避免索引被半途清空。
         self._vector_store.delete_by_doc_id(doc_id)

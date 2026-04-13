@@ -31,9 +31,7 @@ async def get_analytics(db: AsyncSession) -> AnalyticsResponse:
     intent_distribution = {row[0]: row[1] for row in intent_rows}
 
     avg_conf_result = (
-        await db.execute(
-            select(func.avg(Message.confidence)).where(Message.confidence.isnot(None))
-        )
+        await db.execute(select(func.avg(Message.confidence)).where(Message.confidence.isnot(None)))
     ).scalar()
     avg_confidence = float(avg_conf_result) if avg_conf_result else 0.0
 

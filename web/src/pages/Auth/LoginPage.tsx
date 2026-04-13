@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useAuthStore } from "@/stores/authStore";
+import { toastError, toastSuccess } from "@/stores/toastStore";
 import * as authService from "@/services/auth";
 
 export function LoginPage() {
@@ -18,9 +19,12 @@ export function LoginPage() {
     try {
       const res = await authService.login({ username, password });
       login(res.access_token, username);
+      toastSuccess("登录成功", "欢迎回来。");
       navigate("/app/chat");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "登录失败");
+      const message = err instanceof Error ? err.message : "登录失败";
+      setError(message);
+      toastError("登录失败", message);
     } finally {
       setIsLoading(false);
     }

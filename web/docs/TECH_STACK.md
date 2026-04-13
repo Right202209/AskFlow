@@ -1,57 +1,86 @@
-# AskFlow 前端技术栈
+# AskFlow Frontend Tech Stack
 
-## 核心依赖
+> Last updated: 2026-04-06
 
-| 类别 | 库 | 版本 | 用途 |
-|------|-----|------|------|
-| 框架 | React | 19.x | UI 框架 |
-| 构建 | Vite | 6.x | 开发服务器 + 打包 |
-| 语言 | TypeScript | 5.x | 类型安全 |
-| 路由 | React Router | 7.x | SPA 路由 |
-| 状态管理 | Zustand | 5.x | 轻量 Store |
-| UI 组件 | shadcn/ui | — | 可定制组件（代码在项目中） |
-| 样式 | Tailwind CSS | 4.x | 原子化 CSS |
-| 图表 | Recharts | 2.x | 管理看板图表 |
-| 表单 | react-hook-form + zod | — | 表单校验 |
-| 图标 | Lucide React | — | 图标库（shadcn/ui 默认） |
+## Core Dependencies
 
-## 项目约定
+| Category | Library | Notes |
+|----------|---------|-------|
+| UI runtime | React 19 | application UI |
+| Build tool | Vite 6 | local dev server and production build |
+| Language | TypeScript 5.7 | strict typing |
+| Router | React Router 7 | `createBrowserRouter`, guards, navigation |
+| State | Zustand 5 | auth, chat, ticket, admin state |
+| Forms | `react-hook-form`, `zod` | installed; current pages still use local state for most forms |
+| Charts | Recharts 2 | admin dashboard charts |
+| Icons | Lucide React | page and action icons |
+| Styling | Tailwind CSS 4 | utility classes and design tokens |
 
-### 文件命名
+## Styling Model
 
-- 组件：PascalCase（`ChatPage.tsx`、`MessageBubble.tsx`）
-- Hook：camelCase，以 `use` 开头（`useWebSocket.ts`）
-- Store：camelCase，以 `Store` 结尾（`authStore.ts`）
-- Service：camelCase（`api.ts`、`chat.ts`）
-- 类型：camelCase（`chat.ts`），类型名 PascalCase
+The frontend currently uses:
 
-### 目录结构
+- Tailwind utility classes directly in components
+- CSS custom properties in `web/src/styles/globals.css`
+- theme tokens that resemble shadcn-style naming
 
-- `pages/` — 路由级页面组件，按区域分子目录（Auth / App / Admin）
-- `components/` — 可复用组件，按领域分子目录（chat / ticket / document / intent / common / layout / ui）
-- `hooks/` — 自定义 React Hooks
-- `stores/` — Zustand Stores
-- `services/` — API 调用层
-- `types/` — TypeScript 类型定义
+What it does not currently use:
 
-### 代码风格
+- a generated `components/ui/` directory
+- a large shared component library
 
-- 函数组件 + Hooks，不使用 class 组件
-- 不可变数据：Zustand Store 中使用 immer 或展开运算符
-- 组件单一职责：每个文件 < 200 行
-- 样式：Tailwind CSS class，避免内联 style
-- 导出：命名导出，避免 default export（页面组件除外）
+In other words, the project borrows token conventions from shadcn-style setups, but most UI is hand-built in page and feature components.
 
-### API 调用
+## Project Conventions
 
-- 所有 API 调用经过 `services/api.ts` 统一封装
-- 自动挂载 `Authorization: Bearer <token>`
-- 401 响应自动清除登录态并跳转 `/login`
-- 响应统一解包 `APIResponse<T>.data`
+- file names:
+  - pages/components: `PascalCase`
+  - hooks/stores/services/types modules: `camelCase`
+- imports:
+  - use `@/` aliases for `web/src/*`
+- syntax:
+  - double quotes
+  - semicolons
+  - named exports are used broadly, including page modules
+- routing:
+  - `web/src/router/index.tsx` owns route definitions
+  - `web/src/router/guards.tsx` owns auth/role guards
+- API access:
+  - `web/src/services/api.ts` wraps `fetch`
+  - attaches bearer token automatically
+  - clears auth state on `401`
+- persistence:
+  - `authStore` uses Zustand `persist` with key `askflow-auth`
 
-### 状态管理原则
+## State Ownership
 
-- 服务端状态：Zustand Store + 手动 fetch（后续可迁移到 TanStack Query）
-- 客户端状态：React 组件内 `useState`
-- 持久化状态：Zustand `persist` middleware -> `localStorage`
-- WebSocket 状态：专属 `chatStore` 管理流式消息
+| State Type | Owner |
+|------------|-------|
+| auth token, role, user id | `authStore.ts` |
+| conversations, messages, streaming state | `chatStore.ts` |
+| ticket list and selected ticket | `ticketStore.ts` |
+| analytics, documents, intents | `adminStore.ts` |
+| transient form fields | component-local `useState` |
+
+## WebSocket Ownership
+
+`web/src/hooks/useWebSocket.ts` owns:
+
+- socket lifecycle
+- heartbeat timers
+- reconnect backoff
+- mapping server events into chat-store actions
+
+`chatStore.ts` owns:
+
+- conversation list
+- cached message history
+- streaming token accumulation
+- intent/source side-panel state
+
+## Current Technical Gaps
+
+1. No frontend test runner is configured yet
+2. The production build still emits a large-chunk warning
+3. Forms are not yet standardized on `react-hook-form` despite the dependency being present
+4. Some frontend document typings do not match the backend schema exactly

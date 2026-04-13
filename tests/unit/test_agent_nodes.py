@@ -102,7 +102,11 @@ class TestAgentNodes:
     @pytest.mark.asyncio
     async def test_tool_node_uses_tool_display(self, monkeypatch):
         async def fake_execute_tool(**kwargs):
-            return {"display": "订单 123456 已发货", "tool": "search_order", "raw": {"order_id": "123456"}}
+            return {
+                "display": "订单 123456 已发货",
+                "tool": "search_order",
+                "raw": {"order_id": "123456"},
+            }
 
         monkeypatch.setattr(tools_module, "execute_tool", fake_execute_tool)
         state = AgentState(

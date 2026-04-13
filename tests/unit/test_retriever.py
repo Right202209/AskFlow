@@ -73,7 +73,9 @@ class TestHybridRetriever:
             RetrievalResult("bm-only", "bm only", {"title": "BM25 Only"}, 2.0, "bm25"),
         ]
 
-        results = retriever._rrf_fuse(vector_results, bm25_results, top_k=2, vector_weight=0.6, bm25_weight=0.4)
+        results = retriever._rrf_fuse(
+            vector_results, bm25_results, top_k=2, vector_weight=0.6, bm25_weight=0.4
+        )
 
         assert [item.id for item in results] == ["shared", "vec-only"]
         assert all(item.source == "fused" for item in results)

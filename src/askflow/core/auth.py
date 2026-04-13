@@ -48,4 +48,5 @@ def require_role(*roles: UserRole):
         if user.role not in roles:
             raise ForbiddenError(f"Required role: {', '.join(r.value for r in roles)}")
         return user
+
     return _check

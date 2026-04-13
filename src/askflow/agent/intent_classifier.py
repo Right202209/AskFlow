@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
 
 from askflow.core.logging import get_logger
 from askflow.core.metrics import INTENT_CLASSIFICATION_COUNT
@@ -26,7 +25,17 @@ Respond with ONLY a JSON object:
 User message: {message}"""
 
 KEYWORD_RULES: dict[str, list[str]] = {
-    "handoff": ["转人工", "人工客服", "talk to human", "real person", "agent"],
+    "handoff": [
+        "转人工",
+        "人工客服",
+        "talk to human",
+        "talk to a human",
+        "talk to someone",
+        "real person",
+        "human agent",
+        "human",
+        "agent",
+    ],
     "complaint": ["投诉", "差评", "不满", "complain", "terrible", "worst"],
     "fault_report": ["报错", "错误", "bug", "500", "故障", "crash", "error", "exception"],
     "order_query": ["订单", "快递", "物流", "发货", "order", "shipping", "delivery", "tracking"],
@@ -37,7 +46,9 @@ class IntentClassifier:
     def __init__(self, llm: LLMClient) -> None:
         self._llm = llm
 
-    async def classify(self, message: str, context: list[dict[str, str]] | None = None) -> IntentResult:
+    async def classify(
+        self, message: str, context: list[dict[str, str]] | None = None
+    ) -> IntentResult:
         rule_result = self._rule_classify(message)
         if rule_result and rule_result.confidence >= 0.9:
             INTENT_CLASSIFICATION_COUNT.labels(intent=rule_result.label).inc()

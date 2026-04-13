@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, Upload, RefreshCw, Trash2 } from "lucide-react";
 import { useAdminStore } from "@/stores/adminStore";
 import { useAuthStore } from "@/stores/authStore";
+import { toastError, toastSuccess } from "@/stores/toastStore";
 import * as documentService from "@/services/document";
 import { cn } from "@/lib/utils";
 import type { DocumentStatus } from "@/types/document";
@@ -41,7 +42,13 @@ export function DocumentsPage() {
       formData.append("file", file);
       formData.append("title", file.name);
       await documentService.uploadDocument(formData);
-      fetchDocuments();
+      await fetchDocuments();
+      toastSuccess("文档上传成功", file.name);
+    } catch (error) {
+      toastError(
+        "上传失败",
+        error instanceof Error ? error.message : "上传文档时发生错误",
+      );
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -49,14 +56,30 @@ export function DocumentsPage() {
   };
 
   const handleReindex = async (id: string) => {
-    await documentService.reindexDocument(id);
-    fetchDocuments();
+    try {
+      await documentService.reindexDocument(id);
+      await fetchDocuments();
+      toastSuccess("已触发重建索引");
+    } catch (error) {
+      toastError(
+        "重建索引失败",
+        error instanceof Error ? error.message : "重建索引时发生错误",
+      );
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("确定删除该文档？")) return;
-    await documentService.deleteDocument(id);
-    fetchDocuments();
+    try {
+      await documentService.deleteDocument(id);
+      await fetchDocuments();
+      toastSuccess("文档已删除");
+    } catch (error) {
+      toastError(
+        "删除失败",
+        error instanceof Error ? error.message : "删除文档时发生错误",
+      );
+    }
   };
 
   const filtered = statusFilter === "all"

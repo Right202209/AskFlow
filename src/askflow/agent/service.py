@@ -50,7 +50,14 @@ def invalidate_route_map_cache() -> None:
 class ProcessResult:
     """AgentService.process 的返回值，包含流式 token、来源、意图以及副作用元数据。"""
 
-    __slots__ = ("token_stream", "sources", "intent", "ticket_data", "should_handoff", "tool_result")
+    __slots__ = (
+        "token_stream",
+        "sources",
+        "intent",
+        "ticket_data",
+        "should_handoff",
+        "tool_result",
+    )
 
     def __init__(
         self,
@@ -107,6 +114,7 @@ class AgentService:
 
         try:
             from askflow.agent.nodes import classify_node
+
             state = await classify_node(state, self._classifier)
         except Exception as e:
             logger.warning("classification_failed_fallback_rag", error=str(e))

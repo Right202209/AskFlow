@@ -1,6 +1,9 @@
+export type ConversationStatus = "active" | "closed" | "transferred";
+
 export interface Conversation {
   id: string;
   user_id: string;
+  status: ConversationStatus;
   title: string | null;
   created_at: string;
   updated_at: string;

@@ -3,6 +3,7 @@
 每个工具函数接收标准参数，返回 {"display": str, ...} 格式的结果字典。
 新增业务工具只需在 TOOLS 中注册即可。
 """
+
 from __future__ import annotations
 
 import re

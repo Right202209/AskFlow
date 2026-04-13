@@ -1,400 +1,216 @@
 # AskFlow
 
-基于 RAG（检索增强生成）和 Agent 架构的智能客服系统。
+AskFlow 是一个围绕 FastAPI、RAG 和意图路由 Agent 构建的智能客服系统。本仓库同时包含 `src/askflow/` 下的后端应用和 `web/` 下的 React 前端。
 
-AskFlow 将私有知识库检索、意图识别、流程路由和工单管理串联为自动化闭环，减少人工重复劳动，同时保证私有知识安全可控、不外泄。
+## 当前概况
 
-## 系统架构
+- 后端：按聊天、RAG、Agent 路由、工单、嵌入、管理端拆分的 FastAPI 应用
+- 前端：React 19 + Vite 应用，已实现登录注册、聊天、工单、看板、文档管理、意图管理
+- 基础设施：Docker Compose 启动 PostgreSQL、Redis、ChromaDB、MinIO
+- 文档：项目级文档放在 `docs/`，前端专项文档放在 `web/docs/`
+
+当前实现状态和缺口见 [docs/status/PROJECT_STATUS.md](docs/status/PROJECT_STATUS.md)。
+
+## 架构概览
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  客户端（Web 聊天界面）                   │
-└──────────────────────────┬──────────────────────────────┘
-                           │ WebSocket / HTTPS
-┌──────────────────────────▼──────────────────────────────┐
-│                    FastAPI 网关层                        │
-│          认证 (JWT) · 限流 · 跨域 · 链路追踪              │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────┐
-│                        服务层                            │
-│                                                         │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐         │
-│  │  Chat      │  │    RAG     │  │   Agent    │         │
-│  │  WebSocket │  │  检索 & 生成│  │  意图 &    │         │
-│  │  流式输出   │  │           │  │  路由      │          │
-│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘         │
-│        │               │               │                │
-│  ┌─────┴──────┐  ┌─────┴──────┐  ┌─────┴──────┐         │
-│  │  工单服务   │  │  嵌入服务   │  │  管理服务   │        │
-│  └────────────┘  └────────────┘  └────────────┘         │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────┐
-│                       数据层                             │
-│    PostgreSQL · Redis · ChromaDB · MinIO                │
-└─────────────────────────────────────────────────────────┘
+React Web UI
+    |
+    | HTTPS / WebSocket
+    v
+FastAPI API
+    |
+    +-- chat
+    +-- rag
+    +-- agent
+    +-- tickets
+    +-- embedding
+    +-- admin
+    |
+    +-- PostgreSQL
+    +-- Redis
+    +-- ChromaDB
+    +-- MinIO
 ```
 
-## 核心功能
+## 已实现能力
 
-- **RAG 问答** — BM25 + 向量混合检索，倒数排序融合（RRF），可选交叉编码器重排序，LLM 生成回答并附带来源引用
-- **Agent 系统** — 规则 + LLM 双重意图识别，配置驱动路由至 RAG / 工单 / 转人工 / 澄清追问
-- **流式聊天** — 基于 WebSocket 的实时逐字输出，支持心跳检测、取消生成、断线自动重连
-- **工单管理** — 自动创建工单，24 小时去重，状态跟踪，WebSocket 实时通知
-- **可配置嵌入** — 基于 Protocol 的设计，支持本地（fastembed，CPU ONNX）和 API（OpenAI 兼容）两种嵌入方式
-- **文档处理** — 支持 PDF、DOCX、Markdown、HTML 解析，可配置分块大小和重叠
-- **优雅降级** — LLM 不可用时返回原文片段；向量库不可用时降级为 BM25；Agent 异常时回退到 RAG
-- **可观测性** — 结构化 JSON 日志（含 trace_id），Prometheus 指标（请求数/延迟、RAG 查询、LLM Token、意图分布）
-- **管理后台** — 知识文档/意图配置/Prompt 模板管理，数据统计看板
-- **认证安全** — JWT 认证，RBAC 权限控制（user/agent/admin），Redis 滑动窗口限流（60 次/分钟）
+- JWT 登录认证，以及前后端基于角色的访问控制
+- WebSocket 聊天，支持流式 token、心跳、取消、断线重连
+- BM25 与 Chroma 向量检索结合的混合召回
+- `rag`、`ticket`、`handoff`、`tool`、`clarify` 五类路由执行
+- 工单创建、更新、用户视角列表，以及 admin/agent 视角管理
+- 文档上传、索引、重建索引、删除，以及 MinIO 原文件存储
+- 管理看板、文档管理、意图配置接口
+- `/health` 与 `/metrics` 运维接口
 
-## 技术选型
+## 当前缺口
 
-| 组件 | 技术 |
+- Prompt 模板 CRUD 与版本化尚未实现
+- 检索结果按来源/时间/标签过滤尚未实现
+- `order_query` 仍然使用模拟工具实现
+- 还没有用户管理 API
+- 集成测试、E2E 测试和前端自动化测试仍为空白
+
+## 仓库结构
+
+| 路径 | 用途 |
 |------|------|
-| 后端框架 | FastAPI（异步） |
-| 关系数据库 | PostgreSQL 16 + SQLAlchemy 2.0（异步） |
-| 向量数据库 | ChromaDB |
-| 缓存 | Redis 7 |
-| 对象存储 | MinIO（S3 兼容） |
-| 大模型 | OpenAI 兼容 API（Ollama、vLLM 等） |
-| 嵌入模型 | fastembed（本地，CPU ONNX）/ OpenAI 兼容 API |
-| 搜索 | BM25（rank_bm25 + jieba 分词）+ 向量检索 |
-| 认证 | JWT（PyJWT）+ bcrypt |
-| 日志 | structlog（JSON 格式） |
-| 指标 | prometheus-client |
-| 数据库迁移 | Alembic |
-| 聊天界面 | React 19 + Vite + shadcn/ui（在 `web/` 目录下建设中） |
+| `src/askflow/` | 后端源码 |
+| `web/src/` | React 前端源码 |
+| `alembic/` | 数据库迁移 |
+| `tests/` | 后端测试 |
+| `scripts/` | 初始化与本地辅助脚本 |
+| `docs/` | 项目文档、状态、审计 |
+| `web/docs/` | 前端规划与实现文档 |
 
-> **注意**：前端正在使用 React 19 + Vite + shadcn/ui 在 `web/` 目录下重建。旧版原生 JS 前端已移除。API 文档请访问 `/docs`。
-
-## 项目结构
-
-```
-AskFlow/
-├── pyproject.toml              # 依赖与构建配置
-├── docker-compose.yml          # PostgreSQL, Redis, ChromaDB, MinIO
-├── Dockerfile
-├── Makefile                    # 开发命令
-├── alembic.ini
-├── .env.example
-├── alembic/                    # 数据库迁移
-│   ├── env.py
-│   └── versions/
-├── web/                       # 前端（React 19 + Vite，建设中）
-├── scripts/
-│   ├── seed_data.py            # 初始数据填充
-│   └── create_user.py          # 用户创建工具
-├── tests/
-│   ├── conftest.py
-│   ├── unit/                   # 单元测试
-│   ├── integration/            # 集成测试
-│   └── e2e/                    # 端到端测试
-└── src/askflow/
-    ├── main.py                 # 应用工厂 + 生命周期
-    ├── config.py               # Pydantic Settings 配置
-    ├── dependencies.py         # 依赖注入
-    ├── core/                   # 共享基础设施
-    │   ├── database.py         # SQLAlchemy 异步引擎 + 会话
-    │   ├── redis.py            # Redis 连接池
-    │   ├── minio_client.py     # MinIO 封装
-    │   ├── security.py         # JWT + 密码哈希
-    │   ├── auth.py             # 当前用户获取、角色校验
-    │   ├── rate_limiter.py     # Redis 滑动窗口限流
-    │   ├── logging.py          # structlog JSON + trace_id
-    │   ├── trace.py            # contextvars 链路追踪 ID
-    │   ├── exceptions.py       # 自定义异常 + 处理器
-    │   ├── middleware.py       # CORS、链路追踪、日志中间件
-    │   └── metrics.py          # Prometheus 计数器/直方图
-    ├── models/                 # SQLAlchemy ORM 模型
-    │   ├── base.py             # Base、UUID Mixin、时间戳 Mixin
-    │   ├── user.py             # 用户
-    │   ├── conversation.py     # 会话
-    │   ├── message.py          # 消息
-    │   ├── ticket.py           # 工单
-    │   ├── document.py         # 知识文档
-    │   └── intent_config.py    # 意图配置
-    ├── schemas/                # Pydantic 请求/响应模型
-    │   ├── common.py           # APIResponse, PaginatedResponse
-    │   ├── auth.py
-    │   ├── conversation.py
-    │   ├── message.py
-    │   ├── ticket.py
-    │   ├── document.py
-    │   ├── intent.py
-    │   └── admin.py
-    ├── repositories/           # 数据访问层
-    │   ├── user_repo.py
-    │   ├── conversation_repo.py
-    │   ├── message_repo.py
-    │   ├── ticket_repo.py
-    │   ├── document_repo.py
-    │   └── intent_config_repo.py
-    ├── chat/                   # WebSocket + 会话管理
-    │   ├── protocol.py         # 消息类型与序列化
-    │   ├── manager.py          # 连接管理器
-    │   ├── session.py          # Redis 会话存储
-    │   └── router.py           # WS 端点 + REST 端点
-    ├── rag/                    # 检索增强生成
-    │   ├── llm_client.py       # OpenAI 兼容流式客户端
-    │   ├── vector_store.py     # ChromaDB 封装
-    │   ├── bm25.py             # BM25 索引（jieba 分词）
-    │   ├── retriever.py        # 混合检索 + RRF 融合
-    │   ├── reranker.py         # 可选交叉编码器重排序
-    │   ├── prompt_builder.py   # System Prompt + 上下文模板
-    │   ├── service.py          # RAG 查询编排
-    │   └── router.py
-    ├── agent/                  # 意图识别 + 路由
-    │   ├── intent_classifier.py # 规则 + LLM 双重分类
-    │   ├── state.py            # Agent 状态
-    │   ├── graph.py            # Agent 图（分类 → 路由）
-    │   ├── nodes.py            # RAG、工单、转人工、澄清节点
-    │   ├── tools.py            # 业务工具（订单查询等）
-    │   ├── service.py          # Agent 编排服务
-    │   └── router.py
-    ├── ticket/                 # 工单生命周期
-    │   ├── service.py          # CRUD + 状态流转
-    │   ├── dedup.py            # 24 小时去重
-    │   ├── notifier.py         # WebSocket 通知
-    │   └── router.py
-    ├── embedding/              # 文档处理 + 向量化
-    │   ├── embedder.py         # Embedder 协议 + 实现
-    │   ├── parser.py           # PDF、DOCX、HTML、MD 解析器
-    │   ├── chunker.py          # 文本分块（支持重叠）
-    │   ├── service.py          # 索引编排
-    │   ├── router.py
-    │   └── index_worker.py
-    └── admin/                  # 管理 + 统计
-        ├── service.py          # 文档/意图管理
-        ├── analytics.py        # 聚合统计
-        └── router.py           # 认证 + 管理端点
-```
+更完整的目录说明见 [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)。
 
 ## 快速开始
 
 ### 前置条件
 
 - Python 3.11+
-- Docker & Docker Compose
-- OpenAI 兼容的 LLM 服务（如 Ollama 运行 `qwen2.5:7b`）
+- Node.js 20+
+- Docker（支持 Compose）
+- 可用的 OpenAI 兼容 LLM 接口，用于聊天与可选嵌入
 
-### 1. 克隆与配置
-
-```bash
-git clone <repo-url> AskFlow
-cd AskFlow
-cp .env.example .env
-# 编辑 .env，配置 LLM 端点、密钥等
-```
-
-### 2. 启动基础设施
-
-```bash
-make docker-up
-# 启动 PostgreSQL、Redis、ChromaDB、MinIO
-```
-
-### 3. 安装依赖
+### 1. 创建虚拟环境
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-make install
 ```
 
-### 4. 数据库迁移与初始数据
+### 2. 安装依赖
+
+```bash
+make install
+make install-web
+```
+
+### 3. 配置环境变量
+
+```bash
+cp .env.example .env
+```
+
+`.env.example` 已包含完整默认值。通常需要关注的变量有：
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `CHROMA_HOST` / `CHROMA_PORT`
+- `MINIO_*`
+- `LLM_*`
+- `EMBEDDING_*`
+- `CORS_ORIGINS`
+
+### 4. 启动本地基础设施
+
+```bash
+make docker-up
+```
+
+默认会启动：
+
+- PostgreSQL：`localhost:5432`
+- Redis：`localhost:6379`
+- ChromaDB：`localhost:8100`
+- MinIO API：`localhost:9000`
+- MinIO Console：`localhost:9001`
+
+### 5. 执行迁移并填充数据
 
 ```bash
 make migrate
 make seed
-# 创建管理员用户（admin / admin123）和默认意图配置
 ```
 
-### 5. 启动服务
+默认种子账号：
+
+- `admin / admin123`
+- `user1 / user123`
+
+### 6. 启动后端
 
 ```bash
 make dev
-# 服务运行在 http://localhost:8000
-# API 文档在 http://localhost:8000/docs
 ```
 
-## API 接口
+后端地址：
 
-### 认证
+- API：`http://localhost:8000`
+- OpenAPI 文档：`http://localhost:8000/docs`
+- 健康检查：`http://localhost:8000/health`
+- 指标：`http://localhost:8000/metrics`
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/admin/auth/register` | 注册新用户 |
-| POST | `/api/v1/admin/auth/login` | 登录，获取 JWT Token |
-| GET | `/api/v1/admin/auth/me` | 获取当前用户信息 |
+### 7. 启动前端
 
-### 聊天
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/chat/conversations` | 创建会话 |
-| GET | `/api/v1/chat/conversations` | 会话列表 |
-| GET | `/api/v1/chat/conversations/{id}/messages` | 获取消息历史 |
-| WS | `/api/v1/chat/ws/{token}` | WebSocket 聊天端点 |
-
-### RAG 问答
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/rag/query` | 知识库查询 |
-
-### Agent
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/agent/classify` | 意图分类 |
-
-### 工单
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/tickets` | 创建工单 |
-| GET | `/api/v1/tickets/{id}` | 查询工单 |
-| PUT | `/api/v1/tickets/{id}` | 更新工单 |
-| GET | `/api/v1/tickets` | 工单列表 |
-
-### 文档嵌入
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/v1/embedding/documents` | 上传并索引文档 |
-| POST | `/api/v1/embedding/documents/{id}/reindex` | 重建文档索引 |
-
-### 管理
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/v1/admin/documents` | 文档列表 |
-| DELETE | `/api/v1/admin/documents/{id}` | 删除文档 |
-| GET | `/api/v1/admin/intents` | 意图配置列表 |
-| POST | `/api/v1/admin/intents` | 创建意图配置 |
-| PUT | `/api/v1/admin/intents/{id}` | 更新意图配置 |
-| DELETE | `/api/v1/admin/intents/{id}` | 删除意图配置 |
-| GET | `/api/v1/admin/tickets` | 所有工单列表（管理员/客服） |
-| GET | `/api/v1/admin/analytics` | 统计看板 |
-
-### 可观测性
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/health` | 健康检查 |
-| GET | `/metrics` | Prometheus 指标 |
-
-## WebSocket 协议
-
-**客户端 -> 服务端：**
-
-```json
-{
-  "type": "message | cancel | ping",
-  "conversation_id": "uuid",
-  "content": "用户输入文本",
-  "timestamp": 1710000000
-}
+```bash
+make dev-web
 ```
 
-**服务端 -> 客户端：**
+前端地址：
 
-```json
-{
-  "type": "token | message_end | error | intent | source | ticket | handoff | pong",
-  "conversation_id": "uuid",
-  "data": {
-    "content": "逐字内容或完整消息",
-    "sources": [{"title": "...", "chunk": "...", "score": 0.92}],
-    "label": "faq",
-    "confidence": 0.95,
-    "ticket_id": "uuid",
-    "transferred": true
-  },
-  "timestamp": 1710000000
-}
-```
+- 应用：`http://localhost:5173`
 
-## 降级策略
-
-| 故障场景 | 降级方案 |
-|----------|----------|
-| LLM 服务不可用 | 返回检索原文片段 + 提示信息 |
-| 向量数据库不可用 | 降级为 BM25 关键词检索 |
-| Agent 路由异常 | 默认走 RAG 问答链路 |
-| WebSocket 断连 | 客户端自动重连，服务端恢复会话上下文 |
-
-## 开发命令
-
-<!-- AUTO-GENERATED from Makefile — do not edit manually -->
+## 常用命令
 
 | 命令 | 说明 |
 |------|------|
-| `make dev` | 启动开发服务器（热重载，端口 8000） |
-| `make test` | 运行测试（含覆盖率） |
-| `make lint` | 代码检查 + 格式检查 |
-| `make format` | 代码自动格式化 |
-| `make clean` | 清理构建产物和缓存 |
-| `make install` | 安装 Python 依赖（可编辑模式） |
-| `make docker-up` | 启动基础设施（PostgreSQL、Redis、ChromaDB、MinIO） |
-| `make docker-down` | 停止基础设施 |
-| `make migrate` | 运行数据库迁移 |
-| `make migrate-create msg="..."` | 创建新迁移 |
-| `make seed` | 填充初始数据 |
-| `make create-user` | 通过 CLI 创建用户 |
+| `make install` | 以 editable 模式安装后端依赖 |
 | `make install-web` | 安装前端依赖 |
-| `make dev-web` | 启动前端开发服务器（端口 5173） |
-| `make build-web` | 构建前端生产版本 |
+| `make docker-up` | 启动 PostgreSQL、Redis、ChromaDB、MinIO |
+| `make docker-down` | 停止本地基础设施 |
+| `make migrate` | 执行 Alembic 迁移 |
+| `make migrate-create msg="..."` | 创建新迁移 |
+| `make seed` | 填充默认用户和意图配置 |
+| `make dev` | 启动 FastAPI 开发服务 |
+| `make dev-web` | 启动 Vite 开发服务 |
+| `make test` | 运行后端测试 |
+| `make lint` | 执行 Ruff 检查 |
+| `make format` | 使用 Ruff 格式化后端代码 |
+| `make build-web` | 构建前端生产包 |
 
-<!-- /AUTO-GENERATED -->
+## API 分组
 
-## 环境变量
+后端挂载的主要路由前缀如下：
 
-<!-- AUTO-GENERATED from .env.example — do not edit manually -->
+| 模块 | 前缀 |
+|------|------|
+| RAG | `/api/v1/rag` |
+| Embedding | `/api/v1/embedding` |
+| Chat | `/api/v1/chat` |
+| Agent | `/api/v1/agent` |
+| Tickets | `/api/v1/tickets` |
+| Admin | `/api/v1/admin` |
 
-| 变量 | 必填 | 默认值 | 说明 |
-|------|------|--------|------|
-| **应用** | | | |
-| `APP_NAME` | 否 | `AskFlow` | 应用显示名称 |
-| `APP_ENV` | 否 | `development` | 环境（`development` / `production`） |
-| `DEBUG` | 否 | `true` | 启用调试模式 |
-| `SECRET_KEY` | **是** | — | JWT 签名密钥（生产环境务必修改！） |
-| **数据库** | | | |
-| `DATABASE_URL` | **是** | — | PostgreSQL 连接串（`postgresql+asyncpg://...`） |
-| **Redis** | | | |
-| `REDIS_URL` | **是** | — | Redis 连接串 |
-| **MinIO** | | | |
-| `MINIO_ENDPOINT` | **是** | — | MinIO 端点（`host:port`） |
-| `MINIO_ACCESS_KEY` | **是** | — | MinIO 访问密钥 |
-| `MINIO_SECRET_KEY` | **是** | — | MinIO 密钥 |
-| `MINIO_BUCKET` | 否 | `askflow-docs` | MinIO 存储桶名 |
-| `MINIO_SECURE` | 否 | `false` | MinIO 是否使用 HTTPS |
-| **ChromaDB** | | | |
-| `CHROMA_HOST` | **是** | — | ChromaDB 主机 |
-| `CHROMA_PORT` | 否 | `8100` | ChromaDB 端口 |
-| **大模型** | | | |
-| `LLM_BASE_URL` | **是** | — | OpenAI 兼容 API 地址 |
-| `LLM_API_KEY` | **是** | — | LLM API 密钥 |
-| `LLM_MODEL` | 否 | `qwen2.5:7b` | 模型名称 |
-| `LLM_MAX_TOKENS` | 否 | `2048` | 单次最大 Token 数 |
-| `LLM_TEMPERATURE` | 否 | `0.7` | 采样温度 |
-| **嵌入模型** | | | |
-| `EMBEDDING_PROVIDER` | 否 | `api` | `api`（OpenAI 兼容）或 `local`（fastembed，CPU ONNX） |
-| `EMBEDDING_MODEL` | 否 | `BAAI/bge-small-en-v1.5` | 嵌入模型名称 |
-| `EMBEDDING_API_URL` | 否 | — | 嵌入 API 地址（provider=api 时） |
-| `EMBEDDING_API_KEY` | 否 | — | 嵌入 API 密钥（provider=api 时） |
-| `EMBEDDING_DIMENSION` | 否 | `384` | 向量维度 |
-| **认证** | | | |
-| `JWT_ALGORITHM` | 否 | `HS256` | JWT 签名算法 |
-| `JWT_EXPIRE_MINUTES` | 否 | `1440` | Token 过期时间（分钟） |
-| **限流** | | | |
-| `RATE_LIMIT_PER_MINUTE` | 否 | `60` | 单用户每分钟请求限制 |
-| **跨域** | | | |
-| `CORS_ORIGINS` | 否 | `["http://localhost:5173"]` | 允许的跨域来源（JSON 数组） |
+代表性接口：
 
-<!-- /AUTO-GENERATED -->
+- `POST /api/v1/admin/auth/login`
+- `GET /api/v1/chat/conversations`
+- `WS /api/v1/chat/ws/{token}`
+- `POST /api/v1/rag/query`
+- `POST /api/v1/tickets`
+- `GET /api/v1/admin/analytics`
+- `POST /api/v1/embedding/documents`
+
+完整接口定义请查看 `/docs`。
+
+## 校验说明
+
+- 截至 2026-04-06，`web/` 下 `npm run build` 可通过
+- `make test` 依赖当前 shell 的 Python 环境已安装项目依赖；请先激活 `.venv` 或执行 `make install`
+- 使用仓库 `.venv` 直接运行 `pytest` 时已暴露后端失败用例，因此当前后端测试集不能视为全绿
+
+## 文档索引
+
+- [docs/README.md](docs/README.md) - 项目文档入口
+- [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) - 仓库结构与放置规则
+- [docs/status/PROJECT_STATUS.md](docs/status/PROJECT_STATUS.md) - 当前实现状态
+- [docs/audits/PRD_AUDIT.md](docs/audits/PRD_AUDIT.md) - PRD 对照审计
+- [web/docs/README.md](web/docs/README.md) - 前端文档入口
+- [PRD.md](PRD.md) - 产品需求文档
 
 ## 许可证
 

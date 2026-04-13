@@ -118,6 +118,7 @@ async def test_delete_conversation_rolls_back_when_session_clear_fails(
 async def test_delete_conversation_rejects_unknown_owner(monkeypatch, mock_user, mock_db):
     repo = MagicMock()
     repo.get_by_id_for_user = AsyncMock(return_value=None)
+    repo.delete = AsyncMock()
 
     monkeypatch.setattr("askflow.chat.router.ConversationRepo", lambda db: repo)
 

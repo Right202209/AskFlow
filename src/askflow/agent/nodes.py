@@ -7,7 +7,6 @@ from askflow.agent.intent_classifier import IntentClassifier
 from askflow.agent.state import AgentState
 from askflow.core.logging import get_logger
 from askflow.rag.service import RAGService
-from askflow.schemas.intent import IntentResult
 from askflow.ticket.service import TicketService
 
 logger = get_logger(__name__)
@@ -94,9 +93,13 @@ async def ticket_node(state: AgentState, ticket_service: TicketService) -> Agent
         state.ticket_id = str(ticket.id)
         state.ticket_data = {
             "ticket_id": str(ticket.id),
-            "status": ticket.status.value if hasattr(ticket.status, "value") else str(ticket.status),
+            "status": ticket.status.value
+            if hasattr(ticket.status, "value")
+            else str(ticket.status),
             "type": ticket.type,
-            "priority": ticket.priority.value if hasattr(ticket.priority, "value") else str(ticket.priority),
+            "priority": ticket.priority.value
+            if hasattr(ticket.priority, "value")
+            else str(ticket.priority),
         }
         state.response_tokens = [
             f"已为您创建工单，编号：{ticket.id}。",
@@ -127,14 +130,6 @@ async def handoff_node(
             logger.info("conversation_transferred", conversation_id=state.conversation_id)
         except Exception as e:
             logger.error("handoff_transfer_failed", error=str(e))
-
-    # 将对话摘要一并带给人工坐席
-    context_summary = state.question
-    if state.conversation_history:
-        recent = state.conversation_history[-3:]
-        context_summary = " | ".join(
-            f"{m.get('role', '?')}: {m.get('content', '')[:80]}" for m in recent
-        )
 
     state.response_tokens = [
         "正在为您转接人工客服，请稍候。",

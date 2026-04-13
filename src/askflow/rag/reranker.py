@@ -36,11 +36,9 @@ class Reranker:
     async def _rerank_via_llm(
         self, query: str, results: list[RetrievalResult], top_k: int
     ) -> list[RetrievalResult]:
-        passages = "\n\n".join(
-            f"[{i}] {r.document[:500]}" for i, r in enumerate(results)
-        )
+        passages = "\n\n".join(f"[{i}] {r.document[:500]}" for i, r in enumerate(results))
         prompt = (
-            f"Given the query: \"{query}\"\n\n"
+            f'Given the query: "{query}"\n\n'
             f"Rank these passages by relevance (most relevant first). "
             f"Return ONLY a comma-separated list of passage numbers.\n\n{passages}"
         )

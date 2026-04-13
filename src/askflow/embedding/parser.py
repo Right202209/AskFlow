@@ -26,6 +26,7 @@ def parse_file(file_path: str, content_bytes: bytes | None = None) -> str:
 
 def _parse_pdf(file_path: str, content_bytes: bytes | None) -> str:
     import fitz
+
     if content_bytes:
         doc = fitz.open(stream=content_bytes, filetype="pdf")
     else:
@@ -40,6 +41,7 @@ def _parse_pdf(file_path: str, content_bytes: bytes | None) -> str:
 def _parse_docx(content_bytes: bytes) -> str:
     import io
     from docx import Document
+
     doc = Document(io.BytesIO(content_bytes))
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
@@ -50,6 +52,7 @@ def _parse_markdown(content_bytes: bytes) -> str:
 
 def _parse_html(content_bytes: bytes) -> str:
     from bs4 import BeautifulSoup
+
     soup = BeautifulSoup(content_bytes, "html.parser")
     for tag in soup(["script", "style"]):
         tag.decompose()

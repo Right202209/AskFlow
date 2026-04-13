@@ -52,9 +52,7 @@ class TicketRepo:
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_status(
-        self, ticket_id: uuid.UUID, status: TicketStatus
-    ) -> Ticket | None:
+    async def update_status(self, ticket_id: uuid.UUID, status: TicketStatus) -> Ticket | None:
         ticket = await self.get_by_id(ticket_id)
         if ticket:
             ticket.status = status
@@ -131,9 +129,7 @@ class TicketRepo:
         result = await self._db.execute(stmt)
         return result.scalar() or 0
 
-    async def count_by_user(
-        self, user_id: uuid.UUID, status: TicketStatus | None = None
-    ) -> int:
+    async def count_by_user(self, user_id: uuid.UUID, status: TicketStatus | None = None) -> int:
         stmt = select(func.count(Ticket.id)).where(Ticket.user_id == user_id)
         if status is not None:
             stmt = stmt.where(Ticket.status == status)

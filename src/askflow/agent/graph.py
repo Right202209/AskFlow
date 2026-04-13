@@ -46,7 +46,9 @@ class AgentGraph:
 
         route = route_by_intent(state, route_map=route_map)
 
-        logger.info("agent_routing", route=route, intent=state.intent.label if state.intent else None)
+        logger.info(
+            "agent_routing", route=route, intent=state.intent.label if state.intent else None
+        )
 
         if route == "rag":
             state = await rag_node(state, self._rag_service)

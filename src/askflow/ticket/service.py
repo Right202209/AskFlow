@@ -60,9 +60,7 @@ class TicketService:
             return ticket
         return None
 
-    async def list_user_tickets(
-        self, user_id: uuid.UUID, limit: int = 20, offset: int = 0
-    ):
+    async def list_user_tickets(self, user_id: uuid.UUID, limit: int = 20, offset: int = 0):
         return await self._repo.list_by_user(user_id, limit, offset)
 
     async def count_user_tickets(self, user_id: uuid.UUID) -> int:

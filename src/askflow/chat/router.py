@@ -310,14 +310,10 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                         logger.exception("agent_processing_error", error=str(e))
                         error_msg = "抱歉，处理过程中出现错误，请稍后再试。"
                         full_response.append(error_msg)
-                        await manager.broadcast_token(
-                            connection_id, conversation_id, error_msg
-                        )
+                        await manager.broadcast_token(connection_id, conversation_id, error_msg)
 
                     response_text = "".join(full_response)
-                    await session_store.add_message(
-                        conversation_id, "assistant", response_text
-                    )
+                    await session_store.add_message(conversation_id, "assistant", response_text)
                     await msg_repo.create(
                         conversation_id=conv_uuid,
                         role=MessageRole.assistant,
@@ -338,9 +334,7 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                             ),
                         )
 
-                    await manager.send_message_end(
-                        connection_id, conversation_id, sources
-                    )
+                    await manager.send_message_end(connection_id, conversation_id, sources)
 
     except WebSocketDisconnect:
         pass
