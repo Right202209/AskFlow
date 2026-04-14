@@ -1,4 +1,0 @@
-interface:
-  display_name: "Clear Context"
-  short_description: "Summarize work for a clean restart."
-  default_prompt: "Use $clear-context to prepare a compact handoff so I can continue in a fresh chat."
