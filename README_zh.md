@@ -1,5 +1,7 @@
 # AskFlow
 
+[English](README.md)
+
 AskFlow 是一个围绕 FastAPI、RAG 和意图路由 Agent 构建的智能客服系统。本仓库同时包含 `src/askflow/` 下的后端应用和 `web/` 下的 React 前端。
 
 ## 当前概况

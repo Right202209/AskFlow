@@ -1,5 +1,7 @@
 # AskFlow
 
+[中文](README_zh.md)
+
 AskFlow is an intelligent customer support system built around FastAPI, RAG, and an intent-routing agent layer. This repository contains both the backend application under `src/askflow/` and the React frontend under `web/`.
 
 ## Current Snapshot
