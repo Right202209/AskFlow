@@ -4,9 +4,9 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from askflow.agent.graph import AgentGraph
+from askflow.agent.harness import CognitiveHarness
 from askflow.agent.intent_classifier import IntentClassifier
 from askflow.agent.nodes import rag_stream_node, route_by_intent
-from askflow.agent.state import AgentState
 from askflow.core.logging import get_logger
 from askflow.embedding.embedder import create_embedder
 from askflow.rag.llm_client import llm_client
@@ -57,6 +57,7 @@ class ProcessResult:
         "ticket_data",
         "should_handoff",
         "tool_result",
+        "harness_trace",
     )
 
     def __init__(
@@ -67,6 +68,7 @@ class ProcessResult:
         ticket_data: dict[str, Any] | None = None,
         should_handoff: bool = False,
         tool_result: dict[str, Any] | None = None,
+        harness_trace: dict[str, Any] | None = None,
     ) -> None:
         self.token_stream = token_stream
         self.sources = sources
@@ -74,6 +76,7 @@ class ProcessResult:
         self.ticket_data = ticket_data
         self.should_handoff = should_handoff
         self.tool_result = tool_result
+        self.harness_trace = harness_trace or {}
 
 
 class AgentService:
@@ -85,11 +88,13 @@ class AgentService:
         rag_service: RAGService,
         ticket_service: TicketService | None = None,
         conversation_repo: ConversationRepo | None = None,
+        harness: CognitiveHarness | None = None,
     ) -> None:
         self._classifier = classifier
         self._rag_service = rag_service
         self._ticket_service = ticket_service
         self._conversation_repo = conversation_repo
+        self._harness = harness or CognitiveHarness()
         self._graph = AgentGraph(
             classifier,
             rag_service,
@@ -105,12 +110,21 @@ class AgentService:
         conversation_id: str = "",
     ) -> ProcessResult:
         """返回 ProcessResult，包含响应 token 流、引用来源、意图及副作用元数据。"""
-        state = AgentState(
+        prepared = self._harness.prepare(
             question=question,
             conversation_history=conversation_history or [],
             user_id=user_id,
             conversation_id=conversation_id,
         )
+        state = prepared.state
+
+        if prepared.action == "stop":
+            return ProcessResult(
+                token_stream=self._state_token_stream(state.response_tokens),
+                sources=[],
+                intent=state.intent,
+                harness_trace=state.harness_trace,
+            )
 
         try:
             from askflow.agent.nodes import classify_node
@@ -121,16 +135,18 @@ class AgentService:
             state.intent = IntentResult(label="faq", confidence=0.5)
 
         route_map = await _load_route_map()
-        route = route_by_intent(state, route_map=route_map)
+        candidate_route = route_by_intent(state, route_map=route_map)
+        route = self._harness.choose_route(state, candidate_route)
         logger.info("agent_route_decision", route=route)
 
         if route == "rag":
             try:
                 token_stream, sources = await rag_stream_node(state, self._rag_service)
                 return ProcessResult(
-                    token_stream=token_stream,
+                    token_stream=self._harness.wrap_stream(token_stream),
                     sources=sources,
                     intent=state.intent,
+                    harness_trace=state.harness_trace,
                 )
             except Exception as e:
                 logger.error("rag_failed", error=str(e))
@@ -142,33 +158,28 @@ class AgentService:
                     token_stream=error_stream(),
                     sources=[],
                     intent=state.intent,
+                    harness_trace=state.harness_trace,
                 )
 
         state = await self._graph.run(state, route_map=route_map)
-
-        import asyncio
-
-        async def token_iter():
-            for token in state.response_tokens:
-                # 如果单个 token 是一整句话，按较小粒度（比如两三个字符）拆分，模拟打字机体验
-                if len(token) > 3:
-                    for i in range(0, len(token), 2):
-                        yield token[i:i+2]
-                        await asyncio.sleep(0.05)
-                else:
-                    yield token
-                    await asyncio.sleep(0.05)
-                # 每句话后面加一个空格或换行
-                yield "\n"
+        state = self._harness.finalize_state(state)
 
         return ProcessResult(
-            token_stream=token_iter(),
+            token_stream=self._state_token_stream(state.response_tokens),
             sources=state.sources,
             intent=state.intent,
             ticket_data=state.ticket_data,
             should_handoff=state.should_handoff,
             tool_result=state.tool_result,
+            harness_trace=state.harness_trace,
         )
+
+    async def _state_token_stream(self, response_tokens: list[str]) -> AsyncIterator[str]:
+        import asyncio
+
+        for token in response_tokens:
+            yield token
+            await asyncio.sleep(0.05)
 
 
 def get_agent_service(

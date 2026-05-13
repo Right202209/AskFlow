@@ -261,6 +261,15 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                             user_id=str(user_id),
                             conversation_id=conversation_id,
                         )
+                        if result.harness_trace:
+                            logger.info(
+                                "agent_harness_trace",
+                                conversation_id=conversation_id,
+                                run_id=result.harness_trace.get("run_id"),
+                                route=result.harness_trace.get("route"),
+                                reason=result.harness_trace.get("reason"),
+                                flags=result.harness_trace.get("flags", []),
+                            )
                         intent_result = result.intent
                         sources = result.sources
 

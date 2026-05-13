@@ -6,6 +6,7 @@ import pytest
 
 import askflow.agent.nodes as agent_nodes
 import askflow.agent.service as agent_service_module
+from askflow.agent.harness import CognitiveHarness, CognitiveHarnessPolicy
 from askflow.agent.service import AgentService, invalidate_route_map_cache
 from askflow.agent.state import AgentState
 from askflow.schemas.intent import IntentResult
@@ -102,3 +103,22 @@ class TestAgentService:
         assert result.intent.label == "faq"
         assert result.sources == []
         assert await collect_stream(result.token_stream) == ["抱歉，暂时无法检索信息，请稍后再试。"]
+
+    @pytest.mark.asyncio
+    async def test_process_stops_when_harness_rejects_input(self, monkeypatch):
+        classifier = MagicMock()
+        rag_service = MagicMock()
+        harness = CognitiveHarness(CognitiveHarnessPolicy(max_question_chars=5))
+        service = AgentService(classifier, rag_service, harness=harness)
+
+        classify_spy = AsyncMock()
+        monkeypatch.setattr(agent_nodes, "classify_node", classify_spy)
+
+        result = await service.process("this question is too long")
+
+        classify_spy.assert_not_awaited()
+        assert result.intent is None
+        assert result.harness_trace["reason"] == "question_too_long"
+        assert await collect_stream(result.token_stream) == [
+            "您的问题内容过长，请拆成更短的问题后再发送。"
+        ]

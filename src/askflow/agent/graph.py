@@ -44,7 +44,7 @@ class AgentGraph:
         if not state.intent:
             state = await classify_node(state, self._classifier)
 
-        route = route_by_intent(state, route_map=route_map)
+        route = state.route or route_by_intent(state, route_map=route_map)
 
         logger.info(
             "agent_routing", route=route, intent=state.intent.label if state.intent else None
