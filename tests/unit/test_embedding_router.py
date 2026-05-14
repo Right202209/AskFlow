@@ -121,6 +121,7 @@ async def test_reindex_document_uses_stored_source(monkeypatch, admin_user):
         file_path="guide.txt",
         content_bytes=b"hello",
         title="Guide",
+        source=None,
     )
     assert repo.update_status.await_args_list[0].args == (doc_id, DocumentStatus.indexing)
     assert repo.update_status.await_args_list[1].args == (doc_id, DocumentStatus.active)

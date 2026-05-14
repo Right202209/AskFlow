@@ -5,7 +5,7 @@ from typing import Any
 
 from askflow.agent.graph import AgentGraph
 from askflow.agent.harness import CognitiveHarness
-from askflow.agent.intent_classifier import IntentClassifier
+from askflow.agent.intent_classifier import DEFAULT_INTENT, IntentClassifier
 from askflow.agent.nodes import rag_stream_node, route_by_intent
 from askflow.core.logging import get_logger
 from askflow.embedding.embedder import create_embedder
@@ -132,7 +132,7 @@ class AgentService:
             state = await classify_node(state, self._classifier)
         except Exception as e:
             logger.warning("classification_failed_fallback_rag", error=str(e))
-            state.intent = IntentResult(label="faq", confidence=0.5)
+            state.intent = IntentResult(label=DEFAULT_INTENT, confidence=0.5)
 
         route_map = await _load_route_map()
         candidate_route = route_by_intent(state, route_map=route_map)

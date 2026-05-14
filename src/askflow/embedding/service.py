@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from askflow.core.logging import get_logger
 from askflow.embedding.chunker import chunk_text
 from askflow.embedding.embedder import Embedder
@@ -22,10 +24,15 @@ class EmbeddingService:
         file_path: str,
         content_bytes: bytes | None = None,
         title: str = "",
+        source: str | None = None,
         chunk_size: int = 500,
         chunk_overlap: int = 50,
     ) -> int:
-        """重建单个文档的可检索表示，并返回写入的分块数量。"""
+        """重建单个文档的可检索表示，并返回写入的分块数量。
+
+        每个分块会带上 `doc_id / title / source / indexed_at_epoch`，
+        后续 RAG 检索的元数据过滤依赖这些字段。
+        """
         logger.info("indexing_document", doc_id=doc_id, file_path=file_path)
         text = parse_file(file_path, content_bytes)
         chunks = chunk_text(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
@@ -35,10 +42,15 @@ class EmbeddingService:
 
         embeddings = await self._embedder.embed(chunks)
         ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
-        # 这些元数据会在检索命中和前端来源展示时继续沿用。
-        metadatas = [
-            {"doc_id": doc_id, "title": title, "chunk_index": i} for i in range(len(chunks))
-        ]
+        indexed_at_epoch = int(datetime.now(timezone.utc).timestamp())
+        base_meta: dict = {
+            "doc_id": doc_id,
+            "title": title,
+            "indexed_at_epoch": indexed_at_epoch,
+        }
+        if source:
+            base_meta["source"] = source
+        metadatas = [{**base_meta, "chunk_index": i} for i in range(len(chunks))]
         # 只有在解析和向量化都成功后，才替换旧分块，避免索引被半途清空。
         self._vector_store.delete_by_doc_id(doc_id)
         self._vector_store.add(

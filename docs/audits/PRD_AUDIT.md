@@ -1,6 +1,6 @@
 # AskFlow PRD Audit
 
-> Last reviewed: 2026-04-06
+> Last reviewed: 2026-04-17
 
 This audit compares the current repository against `PRD.md`. It focuses on what is implemented in code, not on aspirational comments or old roadmap text.
 
@@ -30,8 +30,9 @@ The biggest remaining gaps are product completeness and production-readiness, no
 | Smart Q&A with hybrid retrieval | Complete | `src/askflow/rag/retriever.py`, `src/askflow/rag/service.py` | BM25 plus vector retrieval is implemented |
 | Multi-turn chat context | Complete | `src/askflow/chat/session.py`, `src/askflow/chat/router.py` | session history is passed into processing |
 | Source-aware answers | Complete | `src/askflow/rag/service.py`, WebSocket `source` events | sources are returned to the client |
-| Retrieval filtering by source/time/tag | Missing | no filter parameters in RAG router/service | PRD requirement not exposed |
+| Retrieval filtering by source/time/tag | Partial | `src/askflow/rag/filters.py`, `src/askflow/rag/router.py::RAGQuery.filters` | `sources`, `doc_ids`, `indexed_after/before` wired end-to-end; `tags` is a reserved field that currently logs a warning and is ignored; chunks indexed before 2026-04-17 lack the filter metadata and must be reindexed before they are selectable |
 | Intent classification | Complete | `src/askflow/agent/intent_classifier.py` | rule plus model path exists |
+| Six-intent coverage (FAQ / product / order / fault / complaint / handoff) | Complete | `src/askflow/agent/intent_classifier.py:13-25` | LLM prompt enumerates all six PRD labels; keyword rules cover handoff/complaint/fault_report/order_query |
 | Route execution across multiple flows | Complete | `src/askflow/agent/graph.py`, `src/askflow/agent/nodes.py` | rag, ticket, handoff, tool, clarify routes exist |
 | Business tool integration | Partial | `src/askflow/agent/tools.py` | tool path exists, but `search_order` is mocked |
 | Streaming chat with cancel and heartbeat | Complete | `src/askflow/chat/router.py`, `web/src/hooks/useWebSocket.ts` | implemented on both backend and frontend |
@@ -63,7 +64,7 @@ These items were inconsistent before the doc refresh and are worth keeping expli
 ## Highest-Priority Gaps
 
 1. Prompt template CRUD and versioning
-2. Retrieval metadata filtering
+2. Retrieval tag filtering (source/time/doc-id already wired; tag taxonomy still undefined)
 3. Real business integration behind the tool route
 4. Document preview/download APIs
 5. User-management APIs

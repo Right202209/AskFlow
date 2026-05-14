@@ -12,7 +12,7 @@ class DummyEmbedder:
 
 
 class DummyVectorStore:
-    def query(self, query_embedding, n_results):
+    def query(self, query_embedding, n_results, where=None):
         return {
             "ids": [["vec-1", "vec-2"][:n_results]],
             "documents": [["vector doc 1", "vector doc 2"][:n_results]],
@@ -22,14 +22,14 @@ class DummyVectorStore:
 
 
 class FailingVectorStore:
-    def query(self, query_embedding, n_results):
+    def query(self, query_embedding, n_results, where=None):
         raise RuntimeError("vector unavailable")
 
 
 class FakeBM25Index:
     size = 1
 
-    def search(self, query, top_k):
+    def search(self, query, top_k, predicate=None):
         return [
             {
                 "id": "bm25-1",

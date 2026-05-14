@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from askflow.core.logging import get_logger
 from askflow.embedding.embedder import Embedder
 from askflow.rag.bm25 import bm25_index
+from askflow.rag.filters import RetrievalFilters
 from askflow.rag.vector_store import VectorStore
 
 logger = get_logger(__name__)
@@ -36,6 +37,7 @@ class HybridRetriever:
         bm25_weight: float = 0.4,
         vector_only: bool = False,
         bm25_only: bool = False,
+        filters: RetrievalFilters | None = None,
     ) -> list[RetrievalResult]:
         """优先同时使用两种召回方式，并在单路失败时自动降级。"""
         vector_results: list[RetrievalResult] = []
@@ -43,13 +45,13 @@ class HybridRetriever:
 
         if not bm25_only:
             try:
-                vector_results = await self._vector_search(query, top_k)
+                vector_results = await self._vector_search(query, top_k, filters)
             except Exception as e:
                 logger.warning("vector_search_failed", error=str(e))
                 bm25_only = True
 
         if not vector_only and bm25_index.size > 0:
-            bm25_results = self._bm25_search(query, top_k)
+            bm25_results = self._bm25_search(query, top_k, filters)
 
         if vector_only or not bm25_results:
             return vector_results[:top_k]
@@ -58,10 +60,18 @@ class HybridRetriever:
 
         return self._rrf_fuse(vector_results, bm25_results, top_k, vector_weight, bm25_weight)
 
-    async def _vector_search(self, query: str, top_k: int) -> list[RetrievalResult]:
+    async def _vector_search(
+        self,
+        query: str,
+        top_k: int,
+        filters: RetrievalFilters | None = None,
+    ) -> list[RetrievalResult]:
         """查询向量库，并把底层返回结构转换成稳定的业务对象。"""
         embeddings = await self._embedder.embed([query])
-        results = self._vector_store.query(query_embedding=embeddings[0], n_results=top_k)
+        where = filters.to_chroma_where() if filters else None
+        results = self._vector_store.query(
+            query_embedding=embeddings[0], n_results=top_k, where=where
+        )
         items = []
         if results and results.get("ids"):
             for i, doc_id in enumerate(results["ids"][0]):
@@ -76,9 +86,15 @@ class HybridRetriever:
                 )
         return items
 
-    def _bm25_search(self, query: str, top_k: int) -> list[RetrievalResult]:
+    def _bm25_search(
+        self,
+        query: str,
+        top_k: int,
+        filters: RetrievalFilters | None = None,
+    ) -> list[RetrievalResult]:
         """查询内存中的 BM25 索引，返回与向量检索一致的数据结构。"""
-        results = bm25_index.search(query, top_k)
+        predicate = filters.matches_metadata if filters and not filters.is_empty() else None
+        results = bm25_index.search(query, top_k, predicate=predicate)
         return [
             RetrievalResult(
                 id=r["id"],

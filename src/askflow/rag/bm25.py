@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import jieba
 from rank_bm25 import BM25Okapi
 
@@ -29,23 +31,33 @@ class BM25Index:
         if self._tokenized:
             self._bm25 = BM25Okapi(self._tokenized)
 
-    def search(self, query: str, top_k: int = 10) -> list[dict]:
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        predicate: Callable[[dict], bool] | None = None,
+    ) -> list[dict]:
         if not self._bm25 or not self._corpus:
             return []
         tokenized_query = list(jieba.cut(query))
         scores = self._bm25.get_scores(tokenized_query)
-        scored = sorted(zip(range(len(scores)), scores), key=lambda x: x[1], reverse=True)[:top_k]
+        # 先按 predicate 过滤再排序，避免过滤掉的文档挤占 top_k 名额。
+        scored = [
+            (idx, score)
+            for idx, score in enumerate(scores)
+            if score > 0 and (predicate is None or predicate(self._metadatas[idx]))
+        ]
+        scored.sort(key=lambda x: x[1], reverse=True)
         results = []
-        for idx, score in scored:
-            if score > 0:
-                results.append(
-                    {
-                        "id": self._ids[idx],
-                        "document": self._corpus[idx],
-                        "metadata": self._metadatas[idx],
-                        "score": float(score),
-                    }
-                )
+        for idx, score in scored[:top_k]:
+            results.append(
+                {
+                    "id": self._ids[idx],
+                    "document": self._corpus[idx],
+                    "metadata": self._metadatas[idx],
+                    "score": float(score),
+                }
+            )
         return results
 
     @property

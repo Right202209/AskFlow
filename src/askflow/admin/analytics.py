@@ -11,15 +11,23 @@ from askflow.schemas.admin import AnalyticsResponse
 
 
 async def get_analytics(db: AsyncSession) -> AnalyticsResponse:
-    conv_count = (await db.execute(select(func.count(Conversation.id)))).scalar() or 0
-    msg_count = (await db.execute(select(func.count(Message.id)))).scalar() or 0
-    ticket_count = (await db.execute(select(func.count(Ticket.id)))).scalar() or 0
-    doc_count = (await db.execute(select(func.count(Document.id)))).scalar() or 0
+    # 将 4 个 count 与平均置信度合并为一次 round-trip，减少 admin 面板的 DB 延迟。
+    aggregates_stmt = select(
+        select(func.count(Conversation.id)).scalar_subquery().label("conv"),
+        select(func.count(Message.id)).scalar_subquery().label("msg"),
+        select(func.count(Ticket.id)).scalar_subquery().label("tkt"),
+        select(func.count(Document.id)).scalar_subquery().label("doc"),
+        select(func.avg(Message.confidence))
+        .where(Message.confidence.isnot(None))
+        .scalar_subquery()
+        .label("avg_conf"),
+    )
+    row = (await db.execute(aggregates_stmt)).one()
 
     ticket_status_rows = (
         await db.execute(select(Ticket.status, func.count()).group_by(Ticket.status))
     ).all()
-    tickets_by_status = {str(row[0].value): row[1] for row in ticket_status_rows}
+    tickets_by_status = {str(r[0].value): r[1] for r in ticket_status_rows}
 
     intent_rows = (
         await db.execute(
@@ -28,19 +36,14 @@ async def get_analytics(db: AsyncSession) -> AnalyticsResponse:
             .group_by(Message.intent)
         )
     ).all()
-    intent_distribution = {row[0]: row[1] for row in intent_rows}
-
-    avg_conf_result = (
-        await db.execute(select(func.avg(Message.confidence)).where(Message.confidence.isnot(None)))
-    ).scalar()
-    avg_confidence = float(avg_conf_result) if avg_conf_result else 0.0
+    intent_distribution = {r[0]: r[1] for r in intent_rows}
 
     return AnalyticsResponse(
-        total_conversations=conv_count,
-        total_messages=msg_count,
-        total_tickets=ticket_count,
-        total_documents=doc_count,
+        total_conversations=row.conv or 0,
+        total_messages=row.msg or 0,
+        total_tickets=row.tkt or 0,
+        total_documents=row.doc or 0,
         tickets_by_status=tickets_by_status,
         intent_distribution=intent_distribution,
-        avg_confidence=avg_confidence,
+        avg_confidence=float(row.avg_conf) if row.avg_conf is not None else 0.0,
     )

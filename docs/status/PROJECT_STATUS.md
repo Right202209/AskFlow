@@ -1,27 +1,31 @@
 # AskFlow Project Status
 
-> Last updated: 2026-04-06
+> Last updated: 2026-04-17
 
 ## Executive Summary
 
 AskFlow has moved beyond scaffolding. The repository now contains a usable FastAPI backend, a working React frontend, Docker-based local infrastructure, and a meaningful unit-test baseline. The main outstanding work is in completeness and production hardening rather than basic application shape.
 
+The 2026-04-17 refresh re-verified the code paths cited below against the current tree; the build/test commands were not re-executed in this pass and the results from the 2026-04-06 run are preserved as historical context.
+
 ## Verified Snapshot
 
 ### Repository Shape
 
-- Backend source files under `src/askflow/`: 78
-- Frontend source files under `web/src/`: 40
+- Backend source files under `src/askflow/`: 80
+- Frontend source files under `web/src/`: 42
 - Backend unit test files under `tests/unit/`: 21
 - `tests/integration/` and `tests/e2e/` are still placeholders
 
-### Verification Run on 2026-04-06
+### Verification Run on 2026-04-06 (historical)
 
 | Command | Result | Notes |
 |---------|--------|-------|
 | `npm run build` in `web/` | Passed | Vite build succeeded; bundle warning remains for a large JS chunk |
-| `make test` | Failed in this shell | `pytest` resolved outside the project environment; command assumes activated virtualenv or editable install |
-| `.venv/bin/pytest tests/ -q --cov=src/askflow --cov-report=term-missing` | Failed | the virtualenv run surfaced failing backend tests and did not produce a clean pass during this refresh |
+| `make test` | Failed in that shell | `pytest` resolved outside the project environment; command assumes activated virtualenv or editable install |
+| `.venv/bin/pytest tests/ -q --cov=src/askflow --cov-report=term-missing` | Failed | the virtualenv run surfaced failing backend tests and did not produce a clean pass |
+
+Commands were not re-run during the 2026-04-17 refresh. Re-run before relying on these results for release decisions.
 
 ## Status by Area
 
@@ -53,11 +57,13 @@ AskFlow has moved beyond scaffolding. The repository now contains a usable FastA
   - conversation create/list/rename/archive/delete
   - message history retrieval
   - WebSocket chat loop with ping, cancel, and token streaming
+  - per-message lifecycle (rate-limit → persist → agent → stream → events) extracted into `chat/service.py::process_user_message`; router is now a thin protocol dispatcher
 - RAG flows in `src/askflow/rag/`:
   - BM25 index
   - vector store integration
   - retrieval orchestration
   - LLM client and fallback behavior
+  - metadata filtering (`rag/filters.py`) exposed on `/api/v1/rag/query` for `sources`, `doc_ids`, `indexed_after/before`; `tags` reserved
 - Agent flows in `src/askflow/agent/`:
   - intent classifier
   - route graph
@@ -68,6 +74,7 @@ AskFlow has moved beyond scaffolding. The repository now contains a usable FastA
 - Embedding flows in `src/askflow/embedding/`:
   - parser, chunker, embedder abstraction
   - indexing and reindexing
+  - chunks stamped with `doc_id / title / source / indexed_at_epoch` to support retrieval filtering (requires reindex for legacy chunks)
 - Admin flows in `src/askflow/admin/`:
   - analytics aggregation
   - document and intent management
@@ -75,7 +82,7 @@ AskFlow has moved beyond scaffolding. The repository now contains a usable FastA
 ### Highest-Value Missing Backend Work
 
 1. Prompt template CRUD and versioning
-2. Retrieval metadata filtering by source, time, and tags
+2. Retrieval tag filtering (source/time/doc-id already wired; tag taxonomy still undefined)
 3. Real tool integration for `order_query`
 4. User-management endpoints
 5. Document preview/download endpoints

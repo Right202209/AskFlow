@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
+import jwt
 from fastapi import Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +33,7 @@ async def get_current_user(
     try:
         payload = decode_access_token(token)
         user_id = uuid.UUID(payload["sub"])
-    except Exception:
+    except (jwt.PyJWTError, ValueError, KeyError):
         raise UnauthorizedError("Invalid token")
     repo = UserRepo(db)
     user = await repo.get_by_id(user_id)

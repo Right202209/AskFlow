@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from askflow.core.logging import get_logger
 from askflow.core.metrics import RAG_QUERY_COUNT
+from askflow.rag.filters import RetrievalFilters
 from askflow.rag.llm_client import LLMClient
 from askflow.rag.prompt_builder import build_fallback_response, build_rag_prompt
 from askflow.rag.reranker import Reranker
@@ -41,11 +42,12 @@ class RAGService:
         question: str,
         conversation_history: list[dict[str, str]] | None = None,
         top_k: int = 5,
+        filters: RetrievalFilters | None = None,
     ) -> RAGResult:
         """返回完整答案文本，适合一次性响应的调用方。"""
         RAG_QUERY_COUNT.inc()
         # 先放大召回范围，再重排裁剪到 top_k，通常比直接取前 top_k 更稳。
-        results = await self._retriever.retrieve(question, top_k=top_k * 2)
+        results = await self._retriever.retrieve(question, top_k=top_k * 2, filters=filters)
         results = await self._reranker.rerank(question, results, top_k=top_k)
         sources = [
             {"title": r.metadata.get("title", ""), "chunk": r.document[:200], "score": r.score}
@@ -66,10 +68,11 @@ class RAGService:
         question: str,
         conversation_history: list[dict[str, str]] | None = None,
         top_k: int = 5,
+        filters: RetrievalFilters | None = None,
     ) -> tuple[AsyncIterator[str], list[dict]]:
         """返回 token 流和来源片段，供前端边生成边展示。"""
         RAG_QUERY_COUNT.inc()
-        results = await self._retriever.retrieve(question, top_k=top_k * 2)
+        results = await self._retriever.retrieve(question, top_k=top_k * 2, filters=filters)
         results = await self._reranker.rerank(question, results, top_k=top_k)
         sources = [
             {"title": r.metadata.get("title", ""), "chunk": r.document[:200], "score": r.score}

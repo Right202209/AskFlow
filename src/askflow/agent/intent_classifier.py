@@ -10,6 +10,8 @@ from askflow.schemas.intent import IntentResult
 
 logger = get_logger(__name__)
 
+DEFAULT_INTENT = "faq"
+
 INTENT_PROMPT = """You are an intent classifier for a customer service system. Classify the user's message into one of the following intents:
 
 - faq: General knowledge questions, FAQ inquiries
@@ -67,8 +69,8 @@ class IntentClassifier:
             if rule_result:
                 INTENT_CLASSIFICATION_COUNT.labels(intent=rule_result.label).inc()
                 return rule_result
-            result = IntentResult(label="faq", confidence=0.5, needs_clarification=True)
-            INTENT_CLASSIFICATION_COUNT.labels(intent="faq").inc()
+            result = IntentResult(label=DEFAULT_INTENT, confidence=0.5, needs_clarification=True)
+            INTENT_CLASSIFICATION_COUNT.labels(intent=DEFAULT_INTENT).inc()
             return result
 
     def _rule_classify(self, message: str) -> IntentResult | None:
@@ -90,7 +92,7 @@ class IntentClassifier:
         match = re.search(r"\{.*\}", response, re.DOTALL)
         if match:
             data = json.loads(match.group())
-            label = data.get("intent", "faq")
+            label = data.get("intent", DEFAULT_INTENT)
             confidence = float(data.get("confidence", 0.5))
             needs_clarification = confidence < 0.7
             return IntentResult(
@@ -98,4 +100,4 @@ class IntentClassifier:
                 confidence=confidence,
                 needs_clarification=needs_clarification,
             )
-        return IntentResult(label="faq", confidence=0.5, needs_clarification=True)
+        return IntentResult(label=DEFAULT_INTENT, confidence=0.5, needs_clarification=True)
