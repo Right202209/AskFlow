@@ -57,7 +57,7 @@ async def process_user_message(
             conversation_repo=conv_repo,
         )
 
-        response_text, intent_result, sources = await _stream_agent_response(
+        response_text, intent_result, sources, harness_trace = await _stream_agent_response(
             agent_service=agent_service,
             connection_id=connection_id,
             conversation_id=conversation_id,
@@ -68,13 +68,17 @@ async def process_user_message(
         )
 
         await session_store.add_message(conversation_id, "assistant", response_text)
-        await msg_repo.create(
+        # harness_trace 落到 messages.metadata，让"为什么这条回答被 truncate / fallback"
+        # 在 24h 内能用一句 SQL 查出来，而不是去翻 ELK。
+        message_extra = {"harness_trace": harness_trace} if harness_trace else None
+        assistant_message = await msg_repo.create(
             conversation_id=conv_uuid,
             role=MessageRole.assistant,
             content=response_text,
             intent=intent_result.label if intent_result else None,
             confidence=intent_result.confidence if intent_result else None,
             sources={"sources": sources} if sources else None,
+            extra=message_extra,
         )
         await db.commit()
 
@@ -87,7 +91,12 @@ async def process_user_message(
                     data={"sources": sources},
                 ),
             )
-        await manager.send_message_end(connection_id, conversation_id, sources)
+        await manager.send_message_end(
+            connection_id,
+            conversation_id,
+            sources,
+            message_id=str(assistant_message.id),
+        )
 
 
 async def _enforce_rate_limit(user_id: uuid.UUID, connection_id: str) -> bool:
@@ -137,11 +146,12 @@ async def _stream_agent_response(
     history: list[dict[str, str]],
     user_id: uuid.UUID,
     is_cancelled: Callable[[], bool],
-) -> tuple[str, object, list]:
+) -> tuple[str, object, list, dict]:
     """驱动 Agent 并推送 intent / token / ticket / handoff 事件。"""
     full_response: list[str] = []
     intent_result = None
     sources: list = []
+    harness_trace: dict = {}
 
     try:
         result = await agent_service.process(
@@ -151,6 +161,7 @@ async def _stream_agent_response(
             conversation_id=conversation_id,
         )
         if result.harness_trace:
+            harness_trace = result.harness_trace
             logger.info(
                 "agent_harness_trace",
                 conversation_id=conversation_id,
@@ -206,4 +217,4 @@ async def _stream_agent_response(
         full_response.append(error_msg)
         await manager.broadcast_token(connection_id, conversation_id, error_msg)
 
-    return "".join(full_response), intent_result, sources
+    return "".join(full_response), intent_result, sources, harness_trace

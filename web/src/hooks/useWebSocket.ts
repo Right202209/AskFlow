@@ -15,6 +15,7 @@ export function useWebSocket() {
   const finalizeMessage = useChatStore((s) => s.finalizeMessage);
   const setIntent = useChatStore((s) => s.setIntent);
   const setSources = useChatStore((s) => s.setSources);
+  const setPendingAssistantMessageId = useChatStore((s) => s.setPendingAssistantMessageId);
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     token ? "connecting" : "idle",
   );
@@ -116,6 +117,11 @@ export function useWebSocket() {
           appendToken((msg.data?.content as string) ?? "");
           break;
         case "message_end":
+          // 服务端在 message_end 里带上 message_id，让前端 finalizeMessage 用真实
+          // UUID 落库，👍/👎 按钮直接基于这条 ID 调 feedback 接口。
+          if (msg.data?.message_id) {
+            setPendingAssistantMessageId(msg.data.message_id as string);
+          }
           if (msg.conversation_id) finalizeMessage(msg.conversation_id);
           break;
         case "intent":
@@ -156,7 +162,7 @@ export function useWebSocket() {
         connect();
       }, delay);
     };
-  }, [token, clearTimers, disposeSocket, appendToken, finalizeMessage, setIntent, setSources]);
+  }, [token, clearTimers, disposeSocket, appendToken, finalizeMessage, setIntent, setSources, setPendingAssistantMessageId]);
 
   useEffect(() => {
     if (!token) {

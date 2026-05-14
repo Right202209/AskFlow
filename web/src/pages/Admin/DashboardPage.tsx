@@ -113,6 +113,37 @@ export function DashboardPage() {
         <h3 className="text-sm font-medium">平均置信度</h3>
         <p className="mt-2 text-3xl font-bold">{(analytics.avg_confidence * 100).toFixed(1)}%</p>
       </div>
+
+      {/* Task 3: harness/feedback 三项可信质量指标 */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-lg border p-4">
+          <h3 className="text-sm font-medium">Harness Fallback Rate</h3>
+          <p className="mt-2 text-3xl font-bold">
+            {(analytics.harness_fallback_rate * 100).toFixed(1)}%
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            assistant 消息中 harness 走兜底逻辑的比例
+          </p>
+        </div>
+        <div className="rounded-lg border p-4">
+          <h3 className="text-sm font-medium">Harness Truncate Rate</h3>
+          <p className="mt-2 text-3xl font-bold">
+            {(analytics.harness_truncate_rate * 100).toFixed(1)}%
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            响应被 max_response_chars 截断的比例
+          </p>
+        </div>
+        <div className="rounded-lg border p-4">
+          <h3 className="text-sm font-medium">Thumbs Down (7d)</h3>
+          <p className="mt-2 text-3xl font-bold">
+            {(analytics.thumbs_down_rate_7d * 100).toFixed(1)}%
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            最近 7 天的差评率 ({analytics.feedback_total_7d} 条反馈)
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

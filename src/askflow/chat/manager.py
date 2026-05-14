@@ -50,14 +50,23 @@ class ConnectionManager:
         )
 
     async def send_message_end(
-        self, connection_id: str, conversation_id: str, sources: list[dict] | None = None
+        self,
+        connection_id: str,
+        conversation_id: str,
+        sources: list[dict] | None = None,
+        message_id: str | None = None,
     ) -> None:
+        # message_id 透传给前端，让 👍/👎 按钮能拿到目标消息的 UUID 去调
+        # POST /api/v1/chat/messages/{id}/feedback。
+        payload: dict = {"sources": sources or []}
+        if message_id:
+            payload["message_id"] = message_id
         await self.send(
             connection_id,
             ServerMessage(
                 type=ServerMessageType.message_end,
                 conversation_id=conversation_id,
-                data={"sources": sources or []},
+                data=payload,
             ),
         )
 

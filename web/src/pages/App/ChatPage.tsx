@@ -33,6 +33,7 @@ export function ChatPage() {
     deleteConversation,
     addUserMessage,
     resetStreaming,
+    submitFeedback,
   } = useChatStore();
 
   const [input, setInput] = useState("");
@@ -193,6 +194,15 @@ export function ChatPage() {
               streamingTokens={streamingTokens}
               isLoading={isLoadingMessages}
               endRef={messagesEndRef}
+              onFeedback={async (messageId, rating) => {
+                if (!currentConversationId) return;
+                try {
+                  await submitFeedback(currentConversationId, messageId, rating);
+                  toastSuccess(rating === 1 ? "Thanks for the feedback!" : "We'll review this answer.");
+                } catch (err) {
+                  toastError(err instanceof Error ? err.message : "Failed to submit feedback");
+                }
+              }}
             />
           </div>
 

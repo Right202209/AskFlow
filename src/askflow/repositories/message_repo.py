@@ -20,6 +20,7 @@ class MessageRepo:
         intent: str | None = None,
         confidence: float | None = None,
         sources: dict | None = None,
+        extra: dict | None = None,
     ) -> Message:
         msg = Message(
             conversation_id=conversation_id,
@@ -28,6 +29,7 @@ class MessageRepo:
             intent=intent,
             confidence=confidence,
             sources=sources,
+            extra=extra,
         )
         self._db.add(msg)
         await self._db.flush()
@@ -44,3 +46,8 @@ class MessageRepo:
         )
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_by_id(self, message_id: uuid.UUID) -> Message | None:
+        stmt = select(Message).where(Message.id == message_id)
+        result = await self._db.execute(stmt)
+        return result.scalar_one_or_none()

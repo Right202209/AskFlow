@@ -10,6 +10,8 @@ interface ChatState {
   isStreaming: boolean;
   intent: { label: string; confidence: number } | null;
   sources: Source[];
+  // 服务端返回的最后一条 assistant 消息 ID，用来给 finalizeMessage 用真实 ID。
+  pendingAssistantMessageId: string | null;
   isLoadingConversations: boolean;
   isLoadingMessages: boolean;
 
@@ -23,6 +25,13 @@ interface ChatState {
   finalizeMessage: (conversationId: string) => void;
   setIntent: (intent: { label: string; confidence: number } | null) => void;
   setSources: (sources: Source[]) => void;
+  setPendingAssistantMessageId: (id: string | null) => void;
+  submitFeedback: (
+    conversationId: string,
+    messageId: string,
+    rating: -1 | 1,
+    comment?: string,
+  ) => Promise<void>;
   addUserMessage: (conversationId: string, content: string) => void;
   resetStreaming: () => void;
 }
@@ -35,6 +44,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   isStreaming: false,
   intent: null,
   sources: [],
+  pendingAssistantMessageId: null,
   isLoadingConversations: false,
   isLoadingMessages: false,
 
@@ -134,10 +144,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   finalizeMessage: (conversationId) => {
-    const { streamingTokens, intent, sources } = get();
+    const { streamingTokens, intent, sources, pendingAssistantMessageId } = get();
     if (!streamingTokens) return;
     const msg: Message = {
-      id: crypto.randomUUID(),
+      // 优先用服务端落库的 ID，否则前端临时 UUID（仅在 message_end 缺帧时兜底）。
+      id: pendingAssistantMessageId ?? crypto.randomUUID(),
       conversation_id: conversationId,
       role: "assistant",
       content: streamingTokens,
@@ -145,6 +156,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       confidence: intent?.confidence ?? null,
       sources: sources.length > 0 ? { sources } : null,
       created_at: new Date().toISOString(),
+      feedback: null,
     };
     set((state) => ({
       messages: {
@@ -153,10 +165,41 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       },
       streamingTokens: "",
       isStreaming: false,
+      pendingAssistantMessageId: null,
     }));
   },
 
   setIntent: (intent) => set({ intent }),
   setSources: (sources) => set({ sources }),
-  resetStreaming: () => set({ streamingTokens: "", isStreaming: false, intent: null, sources: [] }),
+  setPendingAssistantMessageId: (id) => set({ pendingAssistantMessageId: id }),
+
+  submitFeedback: async (conversationId, messageId, rating, comment) => {
+    // 乐观更新：先标本地状态，失败回滚 + 抛错给上层弹 toast。
+    const previous = get().messages[conversationId] ?? [];
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationId]: previous.map((m) =>
+          m.id === messageId ? { ...m, feedback: rating } : m,
+        ),
+      },
+    }));
+    try {
+      await chatService.submitFeedback(messageId, rating, comment);
+    } catch (err) {
+      set((state) => ({
+        messages: { ...state.messages, [conversationId]: previous },
+      }));
+      throw err;
+    }
+  },
+
+  resetStreaming: () =>
+    set({
+      streamingTokens: "",
+      isStreaming: false,
+      intent: null,
+      sources: [],
+      pendingAssistantMessageId: null,
+    }),
 }));

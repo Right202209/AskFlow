@@ -52,3 +52,23 @@ export async function deleteConversation(
     method: "DELETE",
   });
 }
+
+export interface FeedbackPayload {
+  id: string;
+  message_id: string;
+  user_id: string;
+  rating: -1 | 1;
+  comment: string | null;
+  created_at: string;
+}
+
+export async function submitFeedback(
+  messageId: string,
+  rating: -1 | 1,
+  comment?: string,
+): Promise<FeedbackPayload> {
+  return apiClient<FeedbackPayload>(`/api/v1/chat/messages/${messageId}/feedback`, {
+    method: "POST",
+    body: JSON.stringify({ rating, comment: comment ?? null }),
+  });
+}

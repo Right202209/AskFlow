@@ -8,6 +8,7 @@ interface MessageListProps {
   streamingTokens: string;
   isLoading: boolean;
   endRef: RefObject<HTMLDivElement | null>;
+  onFeedback?: (messageId: string, rating: -1 | 1) => Promise<void> | void;
 }
 
 export function MessageList({
@@ -15,6 +16,7 @@ export function MessageList({
   streamingTokens,
   isLoading,
   endRef,
+  onFeedback,
 }: MessageListProps) {
   const isAILoading =
     !isLoading &&
@@ -51,6 +53,9 @@ export function MessageList({
           role={message.role}
           content={message.content}
           sources={message.sources?.sources ?? null}
+          messageId={message.role === "assistant" ? message.id : undefined}
+          feedback={message.feedback ?? null}
+          onFeedback={onFeedback}
         />
       ))}
       {streamingTokens && (

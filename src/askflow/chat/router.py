@@ -23,6 +23,7 @@ from askflow.core.logging import get_logger
 from askflow.models.conversation import ConversationStatus
 from askflow.models.user import User
 from askflow.repositories.conversation_repo import ConversationRepo
+from askflow.repositories.feedback_repo import FeedbackRepo
 from askflow.repositories.message_repo import MessageRepo
 from askflow.schemas.common import APIResponse
 from askflow.schemas.conversation import (
@@ -31,6 +32,7 @@ from askflow.schemas.conversation import (
     ConversationRename,
     ConversationResponse,
 )
+from askflow.schemas.feedback import FeedbackCreate, FeedbackResponse
 from askflow.schemas.message import MessageResponse
 
 logger = get_logger(__name__)
@@ -160,6 +162,38 @@ async def get_messages(
     repo = MessageRepo(db)
     messages = await repo.list_by_conversation(conversation_id)
     return APIResponse(data=[MessageResponse.model_validate(m) for m in messages])
+
+
+@router.post(
+    "/messages/{message_id}/feedback",
+    response_model=APIResponse[FeedbackResponse],
+)
+async def submit_feedback(
+    message_id: uuid.UUID,
+    body: FeedbackCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """单条 assistant 消息的二元用户反馈。同一用户对同一消息只保留最新评分。"""
+    # 先确认目标消息确实存在且属于当前用户（穿透 conversation 校验，防止
+    # 任意用户对别人的消息打分）。
+    msg_repo = MessageRepo(db)
+    message = await msg_repo.get_by_id(message_id)
+    if message is None:
+        raise NotFoundError("Message not found")
+
+    conv_repo = ConversationRepo(db)
+    await _get_user_conversation(conv_repo, message.conversation_id, user.id)
+
+    repo = FeedbackRepo(db)
+    row = await repo.upsert(
+        message_id=message_id,
+        user_id=user.id,
+        rating=body.rating,
+        comment=body.comment,
+    )
+    await db.commit()
+    return APIResponse(data=FeedbackResponse.model_validate(row))
 
 
 async def _authenticate_token(token: str) -> uuid.UUID | None:

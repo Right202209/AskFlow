@@ -1,6 +1,6 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { AlertCircle, FileText } from "lucide-react";
+import { AlertCircle, FileText, ThumbsDown, ThumbsUp } from "lucide-react";
 import type { Message, Source } from "@/types/chat";
 
 interface MessageBubbleProps {
@@ -8,6 +8,9 @@ interface MessageBubbleProps {
   content: string;
   sources?: Source[] | null;
   isStreaming?: boolean;
+  messageId?: string;
+  feedback?: -1 | 1 | null;
+  onFeedback?: (messageId: string, rating: -1 | 1) => Promise<void> | void;
 }
 
 function renderContent(content: string) {
@@ -62,10 +65,26 @@ export const MessageBubble = memo(function MessageBubble({
   content,
   sources,
   isStreaming = false,
+  messageId,
+  feedback = null,
+  onFeedback,
 }: MessageBubbleProps) {
   const isUser = role === "user";
+  const [submitting, setSubmitting] = useState(false);
 
   const renderedContent = useMemo(() => renderContent(content), [content]);
+
+  const handleFeedback = async (rating: -1 | 1) => {
+    if (!messageId || !onFeedback || submitting) return;
+    setSubmitting(true);
+    try {
+      await onFeedback(messageId, rating);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const showFeedback = !isUser && !isStreaming && messageId && onFeedback;
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -76,11 +95,11 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       >
         {renderedContent}
-        
+
         {isStreaming && (
           <span className="inline-block h-4 w-1 animate-pulse bg-current mt-1" />
         )}
-        
+
         {sources && sources.length > 0 && (
           <div className="mt-2 space-y-1.5 border-t border-border/50 pt-3">
             <p className="text-xs font-semibold opacity-80 mb-1">Sources</p>
@@ -95,6 +114,35 @@ export const MessageBubble = memo(function MessageBubble({
                 </span>
               </div>
             ))}
+          </div>
+        )}
+
+        {showFeedback && (
+          <div className="mt-1 flex items-center gap-2 pt-2 border-t border-border/40">
+            <button
+              type="button"
+              aria-label="Mark this answer as helpful"
+              disabled={submitting}
+              onClick={() => handleFeedback(1)}
+              className={cn(
+                "p-1 rounded transition-colors disabled:opacity-50",
+                feedback === 1 ? "text-green-600" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <ThumbsUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              aria-label="Mark this answer as not helpful"
+              disabled={submitting}
+              onClick={() => handleFeedback(-1)}
+              className={cn(
+                "p-1 rounded transition-colors disabled:opacity-50",
+                feedback === -1 ? "text-red-600" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <ThumbsDown className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
       </div>

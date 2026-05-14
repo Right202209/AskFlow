@@ -18,6 +18,8 @@ export interface Message {
   confidence: number | null;
   sources: { sources: Source[] } | null;
   created_at: string;
+  // 用户对该条消息的本地反馈状态。仅前端缓存，后端权威值通过 /feedback 写入。
+  feedback?: -1 | 1 | null;
 }
 
 export interface Source {

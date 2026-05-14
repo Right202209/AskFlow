@@ -29,5 +29,9 @@ class Message(Base, UUIDMixin, TimestampMixin):
     intent: Mapped[str | None] = mapped_column(String(100), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     sources: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # 任意结构化元数据，目前主要承载 harness_trace（路由决策、fallback/truncate flag 等）。
+    # 用 SQLAlchemy 的 `attribute_name = "extra"` 把 ORM 属性名与 DB 列名分开，避免与
+    # `DeclarativeBase.metadata` 冲突。
+    extra: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
 
     conversation = relationship("Conversation", back_populates="messages")
