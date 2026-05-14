@@ -27,21 +27,45 @@ Respond with ONLY a JSON object:
 User message: {message}"""
 
 KEYWORD_RULES: dict[str, list[str]] = {
-    "handoff": [
-        "转人工",
-        "人工客服",
-        "talk to human",
-        "talk to a human",
-        "talk to someone",
-        "real person",
-        "human agent",
-        "human",
-        "agent",
-    ],
     "complaint": ["投诉", "差评", "不满", "complain", "terrible", "worst"],
     "fault_report": ["报错", "错误", "bug", "500", "故障", "crash", "error", "exception"],
     "order_query": ["订单", "快递", "物流", "发货", "order", "shipping", "delivery", "tracking"],
 }
+
+# 关键词命中默认置信度。从 0.95 降到 0.7，给 LLM 二次判断留覆盖空间——避免脆性
+# 规则在边缘 case（"talk to the AI agent"、"sales agent"）上一锤定音。
+KEYWORD_HIT_CONFIDENCE = 0.7
+
+# handoff 规则单独拎出来：必须把 human/agent 与 talk/speak/transfer/escalate/real/
+# live/customer service 等上下文词共现才算"想转人工"，否则极易把
+# "I want to talk to the AI agent" / "is there a human override" 误判成 handoff。
+HANDOFF_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        # 中文：直接表达，没有歧义
+        r"转人工",
+        r"转\s*接\s*人工",
+        r"人工客服",
+        r"真人客服",
+        r"找.{0,6}(?:客服|人工)",
+        # talk/speak to (a|the) human —— "AI human" 在客服场景里几乎不存在
+        r"\b(?:talk|speak|chat)\s+(?:to|with)\s+(?:a\s+|an\s+|the\s+|some\s+)?human\b",
+        # talk/speak to (a) real/live/customer service person/agent/rep/human
+        r"\b(?:talk|speak|chat)\s+(?:to|with)\s+(?:a\s+|an\s+|the\s+)?"
+        r"(?:real|live|actual|customer\s+service)\s+"
+        r"(?:person|agent|rep|representative|human)\b",
+        # transfer/escalate (me) (to) (a) human/agent/person/rep
+        r"\b(?:transfer|escalate)\s+(?:me\s+)?(?:to\s+)?(?:a\s+|an\s+|the\s+)?"
+        r"(?:human|agent|person|rep|representative)\b",
+        # standalone "real/live/actual person/human/agent/representative"
+        r"\b(?:real|live|actual)\s+(?:person|human|agent|representative)\b",
+        # "human agent" / "human rep" —— 与 "sales agent" 区分
+        r"\bhuman\s+(?:agent|rep|representative|operator|support)\b",
+        # 直接"connect/get me ... human/agent"
+        r"\b(?:connect|get)\s+(?:me\s+)?(?:with\s+|to\s+)?(?:a\s+|an\s+|the\s+)?"
+        r"(?:real\s+|live\s+|human\s+)(?:person|human|agent|representative|operator)\b",
+    )
+)
 
 
 class IntentClassifier:
@@ -74,11 +98,15 @@ class IntentClassifier:
             return result
 
     def _rule_classify(self, message: str) -> IntentResult | None:
+        # handoff 走专用上下文正则，规避 human/agent 的歧义。
+        for pattern in HANDOFF_PATTERNS:
+            if pattern.search(message):
+                return IntentResult(label="handoff", confidence=KEYWORD_HIT_CONFIDENCE)
         message_lower = message.lower()
         for intent, keywords in KEYWORD_RULES.items():
             for keyword in keywords:
                 if keyword.lower() in message_lower:
-                    return IntentResult(label=intent, confidence=0.95)
+                    return IntentResult(label=intent, confidence=KEYWORD_HIT_CONFIDENCE)
         return None
 
     async def _model_classify(self, message: str) -> IntentResult:
