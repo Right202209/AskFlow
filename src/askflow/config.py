@@ -6,7 +6,8 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "AskFlow"
-    app_env: str = "development"
+    # 默认 production：本地开发必须显式 APP_ENV=development，避免运维忘记配置时仍带默认弱密钥跑起来。
+    app_env: str = "production"
     debug: bool = False
     secret_key: str = "change-me-to-a-random-secret-key"
 

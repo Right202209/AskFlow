@@ -13,13 +13,14 @@ DEFAULT_SECRET_KEY = "change-me-to-a-random-secret-key"
 
 
 def _assert_production_safe_settings() -> None:
-    """非 development 环境禁止沿用默认 secret_key，避免上线后 JWT 可被任何人伪造。"""
+    """fail-safe 启动校验：除非显式 APP_ENV=development，否则不允许默认 secret_key 启动。"""
     if settings.app_env == "development":
         return
     if settings.secret_key == DEFAULT_SECRET_KEY:
         raise RuntimeError(
             "SECRET_KEY is still the default placeholder while APP_ENV="
-            f"{settings.app_env!r}. Set a strong random SECRET_KEY before starting."
+            f"{settings.app_env!r}. Set a strong random SECRET_KEY, or explicitly set "
+            "APP_ENV=development for local development."
         )
 
 

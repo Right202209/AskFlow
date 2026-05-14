@@ -15,6 +15,7 @@ from askflow.chat.protocol import (
 )
 from askflow.chat.service import process_user_message
 from askflow.chat.session import session_store
+from askflow.config import settings
 from askflow.core.auth import get_current_user
 from askflow.core.database import get_db
 from askflow.core.exceptions import NotFoundError
@@ -259,7 +260,6 @@ async def websocket_endpoint(ws: WebSocket):
     await _run_session(ws, user_id)
 
 
-@router.websocket("/ws/{token}")
 async def websocket_endpoint_legacy(ws: WebSocket, token: str):
     """Deprecated: token-in-URL 会被反代日志和浏览器历史记录，请改用 /ws + auth 帧。"""
     logger.warning("ws_legacy_url_token_used")
@@ -271,3 +271,13 @@ async def websocket_endpoint_legacy(ws: WebSocket, token: str):
 
     await ws.accept()
     await _run_session(ws, user_id)
+
+
+def register_legacy_ws_endpoint(target_router) -> None:
+    """显式挂载 legacy /ws/{token}。production 环境一律不挂，让 token 不再走 URL。"""
+    target_router.add_api_websocket_route("/ws/{token}", websocket_endpoint_legacy)
+
+
+# fail-safe：除非显式 APP_ENV=development，否则不挂 legacy 路由。
+if settings.app_env == "development":
+    register_legacy_ws_endpoint(router)
