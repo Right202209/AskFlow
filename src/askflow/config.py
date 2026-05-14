@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # BM25 持久化路径——lifespan 启动时从此文件 reload；写文档后会重新落盘。
     bm25_index_path: str = "data/bm25_index.pkl"
 
+    # 订单查询 webhook——未配置时 search_order 走 mock 行为。
+    order_lookup_webhook_url: str | None = None
+    order_lookup_timeout_s: float = 5.0
+    # 透传给 webhook 的鉴权头（完整字符串，如 "Bearer xxx"）。
+    order_lookup_auth_header: str | None = None
+
     # Auth
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440

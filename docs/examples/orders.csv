@@ -1,0 +1,7 @@
+order_id,status,tracking,estimated_delivery
+AB12345678,shipped,SF1234567890,2-3 business days
+CD23456789,processing,,not yet shipped
+EF34567890,delivered,SF9876543210,delivered on 2026-05-10
+GH45678901,returned,SF5555555555,return received
+IJ56789012,pending,,awaiting payment
+KL67890123,shipped,YT0011223344,1-2 business days

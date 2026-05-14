@@ -9,6 +9,7 @@ from askflow.agent.service import (
     start_route_map_subscriber,
     stop_route_map_subscriber,
 )
+from askflow.agent.tools import close_http_client, init_http_client
 from askflow.config import settings
 from askflow.core.database import engine
 from askflow.core.exceptions import register_exception_handlers
@@ -70,6 +71,8 @@ async def lifespan(app: FastAPI):
     _warm_bm25_index()
     # 跨 worker 路由失效广播——subscriber 必须在 Redis 初始化之后启动。
     start_route_map_subscriber()
+    # 业务工具 httpx 单例——search_order 等异步工具复用同一份连接池。
+    init_http_client()
 
     # 应用启动期一次性装配 AgentService（embedder / vector_store / retriever /
     # reranker / RAG / IntentClassifier / AgentGraph），避免每条用户消息都重建整条栈。
@@ -81,6 +84,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await stop_route_map_subscriber()
+        await close_http_client()
         dispose_agent_service()
         await llm_client.close()
         await engine.dispose()

@@ -52,7 +52,7 @@ FastAPI API
 
 - Prompt template CRUD and versioning are not implemented yet
 - Retrieval metadata filtering by source/time/tag is not implemented
-- `order_query` still uses a mocked tool implementation
+- `order_query` ships with a pluggable webhook adapter; see [Plugging a real order service](#plugging-a-real-order-service)
 - No user-management API exists yet
 - Integration, E2E, and frontend automated tests are still missing
 
@@ -205,6 +205,28 @@ Use `/docs` for the complete schema.
 
 - `npm run build` in `web/` passes as of 2026-04-06
 - `make test` assumes project dependencies are available on your shell `PATH`; activate `.venv` or install the project first with `make install`
+
+## Plugging a real order service
+
+`agent.tools.search_order` ships as a pluggable webhook adapter. When
+`ORDER_LOOKUP_WEBHOOK_URL` is unset, it falls back to a mocked response
+(`data_source: "mock"`) so the demo flow still works end-to-end. Once
+configured, it forwards the order id as a query parameter and returns
+the upstream JSON verbatim (`data_source: "webhook"`); on timeout / 4xx /
+5xx it falls back to mock and increments
+`askflow_order_webhook_failures_total{reason="..."}`.
+
+Minimum integration steps:
+
+1. Stand up a tiny HTTP service that returns the order JSON. A working
+   reference lives at [`docs/examples/order_webhook_demo.py`](docs/examples/order_webhook_demo.py)
+   (a 30-line FastAPI app that reads `docs/examples/orders.csv`).
+2. Set the environment variables, then restart the AskFlow backend:
+   - `ORDER_LOOKUP_WEBHOOK_URL=http://localhost:9100/lookup`
+   - Optional: `ORDER_LOOKUP_TIMEOUT_S=5.0`
+   - Optional: `ORDER_LOOKUP_AUTH_HEADER="Bearer <token>"`
+3. In the chat UI, ask "查我的订单 AB12345678" — the agent will extract
+   the order id (regex `\b[A-Z]{2,4}\d{6,}\b`) and call your webhook.
 
 ## Documentation
 

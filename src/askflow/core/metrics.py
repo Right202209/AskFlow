@@ -58,6 +58,13 @@ TICKET_COUNT = Counter(
     registry=registry,
 )
 
+ORDER_WEBHOOK_FAILURE_COUNT = Counter(
+    "askflow_order_webhook_failures_total",
+    "Order lookup webhook failures (fell back to mock)",
+    ["reason"],
+    registry=registry,
+)
+
 WS_CONNECTIONS = Gauge(
     "askflow_ws_connections_active",
     "Active WebSocket connections",
