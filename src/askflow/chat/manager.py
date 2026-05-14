@@ -17,7 +17,8 @@ class ConnectionManager:
         self._user_connections: dict[str, set[str]] = defaultdict(set)
 
     async def connect(self, ws: WebSocket, connection_id: str, user_id: str) -> None:
-        await ws.accept()
+        # 调用方负责完成 ws.accept()；新版 /ws 流程在等到 auth 帧前就 accept，
+        # 所以这里不再做隐式 accept。
         self._connections[connection_id] = ws
         self._user_connections[user_id].add(connection_id)
         WS_CONNECTIONS.inc()

@@ -26,7 +26,7 @@ export interface Source {
   score: number;
 }
 
-export type ClientMessageType = "message" | "cancel" | "ping";
+export type ClientMessageType = "auth" | "message" | "cancel" | "ping";
 export type ServerMessageType =
   | "token"
   | "message_end"
@@ -40,6 +40,7 @@ export interface ClientMessage {
   type: ClientMessageType;
   conversation_id?: string;
   content?: string;
+  token?: string;
   timestamp: number;
 }
 

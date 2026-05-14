@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -34,6 +35,9 @@ from askflow.schemas.message import MessageResponse
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+# 握手后允许客户端发送 auth 帧的最长等待时间，避免恶意挂连接占用资源。
+AUTH_FRAME_TIMEOUT_SECONDS = 5
 
 _cancel_flags: dict[str, bool] = {}
 
@@ -157,27 +161,30 @@ async def get_messages(
     return APIResponse(data=[MessageResponse.model_validate(m) for m in messages])
 
 
-@router.websocket("/ws/{token}")
-async def websocket_endpoint(ws: WebSocket, token: str):
+async def _authenticate_token(token: str) -> uuid.UUID | None:
+    """校验 JWT 并确认用户存在且活跃，失败一律返回 None 由调用方决定关闭语义。"""
     import jwt
-    from pydantic import ValidationError
 
-    from askflow.core.security import decode_access_token
     from askflow.core.database import async_session_factory
+    from askflow.core.security import decode_access_token
     from askflow.repositories.user_repo import UserRepo
 
     try:
         payload = decode_access_token(token)
         user_id = uuid.UUID(payload["sub"])
     except (jwt.PyJWTError, ValueError, KeyError):
-        await ws.close(code=4001, reason="Invalid token")
-        return
+        return None
 
     async with async_session_factory() as db:
         user = await UserRepo(db).get_by_id(user_id)
         if user is None or not user.is_active:
-            await ws.close(code=4001, reason="User not found or inactive")
-            return
+            return None
+    return user_id
+
+
+async def _run_session(ws: WebSocket, user_id: uuid.UUID) -> None:
+    """认证后驱动连接的消息循环；调用方必须在此之前完成 ws.accept()。"""
+    from pydantic import ValidationError
 
     connection_id = uuid.uuid4().hex
     await manager.connect(ws, connection_id, str(user_id))
@@ -192,6 +199,10 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                 msg = ClientMessage.model_validate_json(raw)
             except (ValidationError, ValueError):
                 await manager.send_error(connection_id, "Invalid message format")
+                continue
+
+            if msg.type == ClientMessageType.auth:
+                # 已认证连接上再收到 auth 帧是误用，丢弃即可，不要重新认证。
                 continue
 
             if msg.type == ClientMessageType.ping:
@@ -213,3 +224,50 @@ async def websocket_endpoint(ws: WebSocket, token: str):
     finally:
         manager.disconnect(connection_id, str(user_id))
         _cancel_flags.pop(connection_id, None)
+
+
+@router.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket):
+    """握手后等待首帧 auth 完成认证，让 JWT 不再出现在 URL/access log/浏览器历史中。"""
+    from pydantic import ValidationError
+
+    await ws.accept()
+
+    try:
+        raw = await asyncio.wait_for(ws.receive_text(), timeout=AUTH_FRAME_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        await ws.close(code=4001, reason="Auth frame timeout")
+        return
+    except WebSocketDisconnect:
+        return
+
+    try:
+        msg = ClientMessage.model_validate_json(raw)
+    except (ValidationError, ValueError):
+        await ws.close(code=4001, reason="Invalid auth frame")
+        return
+
+    if msg.type != ClientMessageType.auth or not msg.token:
+        await ws.close(code=4001, reason="First frame must be auth")
+        return
+
+    user_id = await _authenticate_token(msg.token)
+    if user_id is None:
+        await ws.close(code=4001, reason="Invalid token")
+        return
+
+    await _run_session(ws, user_id)
+
+
+@router.websocket("/ws/{token}")
+async def websocket_endpoint_legacy(ws: WebSocket, token: str):
+    """Deprecated: token-in-URL 会被反代日志和浏览器历史记录，请改用 /ws + auth 帧。"""
+    logger.warning("ws_legacy_url_token_used")
+
+    user_id = await _authenticate_token(token)
+    if user_id is None:
+        await ws.close(code=4001, reason="Invalid token")
+        return
+
+    await ws.accept()
+    await _run_session(ws, user_id)

@@ -80,7 +80,7 @@ export function useWebSocket() {
     wsRef.current = null;
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/chat/ws/${token}`);
+    const ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/chat/ws`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -88,6 +88,14 @@ export function useWebSocket() {
         ws.close();
         return;
       }
+
+      // 握手成功后先发 auth 帧；让 JWT 不再出现在 URL 与 access log 中。
+      const authFrame: ClientMessage = {
+        type: "auth",
+        token,
+        timestamp: Date.now(),
+      };
+      ws.send(JSON.stringify(authFrame));
 
       reconnectAttempts.current = 0;
       setConnectionState("open");

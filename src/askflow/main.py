@@ -9,10 +9,24 @@ from askflow.core.middleware import setup_middleware
 from askflow.core.redis import redis_client
 from askflow.rag.llm_client import llm_client
 
+DEFAULT_SECRET_KEY = "change-me-to-a-random-secret-key"
+
+
+def _assert_production_safe_settings() -> None:
+    """非 development 环境禁止沿用默认 secret_key，避免上线后 JWT 可被任何人伪造。"""
+    if settings.app_env == "development":
+        return
+    if settings.secret_key == DEFAULT_SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY is still the default placeholder while APP_ENV="
+            f"{settings.app_env!r}. Set a strong random SECRET_KEY before starting."
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """在应用生命周期内初始化并释放共享基础设施。"""
+    _assert_production_safe_settings()
     await redis_client.initialize()
     try:
         yield

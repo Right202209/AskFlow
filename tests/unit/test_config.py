@@ -23,3 +23,32 @@ class TestConfig:
         assert s.app_name == "CustomApp"
         assert s.debug is True
         assert s.rate_limit_per_minute == 120
+
+
+class TestProductionSafetyCheck:
+    """`_assert_production_safe_settings` 必须阻止生产环境继续使用默认 secret_key。"""
+
+    def test_default_secret_in_development_is_allowed(self, monkeypatch):
+        from askflow.main import DEFAULT_SECRET_KEY, _assert_production_safe_settings, settings
+
+        monkeypatch.setattr(settings, "app_env", "development")
+        monkeypatch.setattr(settings, "secret_key", DEFAULT_SECRET_KEY)
+        # 不应抛出
+        _assert_production_safe_settings()
+
+    def test_default_secret_in_production_raises(self, monkeypatch):
+        import pytest
+
+        from askflow.main import DEFAULT_SECRET_KEY, _assert_production_safe_settings, settings
+
+        monkeypatch.setattr(settings, "app_env", "production")
+        monkeypatch.setattr(settings, "secret_key", DEFAULT_SECRET_KEY)
+        with pytest.raises(RuntimeError, match="SECRET_KEY"):
+            _assert_production_safe_settings()
+
+    def test_custom_secret_in_production_passes(self, monkeypatch):
+        from askflow.main import _assert_production_safe_settings, settings
+
+        monkeypatch.setattr(settings, "app_env", "production")
+        monkeypatch.setattr(settings, "secret_key", "a-real-secret-please-rotate")
+        _assert_production_safe_settings()

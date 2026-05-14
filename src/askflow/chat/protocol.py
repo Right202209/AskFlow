@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 
 class ClientMessageType(str, Enum):
+    auth = "auth"
     message = "message"
     cancel = "cancel"
     ping = "ping"
@@ -28,6 +29,8 @@ class ClientMessage(BaseModel):
     type: ClientMessageType
     conversation_id: str | None = None
     content: str = ""
+    # 仅 auth 帧使用，避免把 JWT 放进 URL 让代理/日志截取。
+    token: str | None = None
     timestamp: int = 0
 
 
