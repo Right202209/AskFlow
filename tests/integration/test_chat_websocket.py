@@ -127,7 +127,12 @@ def ws_app(monkeypatch, stub_agent_service):
     # 2) async_session_factory：返回一个上下文管理器，session 是 MagicMock。
     class FakeSessionCM:
         async def __aenter__(self):
-            return MagicMock()
+            session = MagicMock()
+            session.commit = AsyncMock()
+            session.rollback = AsyncMock()
+            session.flush = AsyncMock()
+            session.close = AsyncMock()
+            return session
 
         async def __aexit__(self, *exc):
             return None
