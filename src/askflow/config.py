@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     embedding_api_key: str = "ollama"
     embedding_dimension: int = 384
 
+    # BM25 持久化路径——lifespan 启动时从此文件 reload；写文档后会重新落盘。
+    bm25_index_path: str = "data/bm25_index.pkl"
+
     # Auth
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440

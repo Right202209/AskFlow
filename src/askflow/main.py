@@ -2,15 +2,26 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from askflow.agent.service import build_agent_service, dispose_agent_service, init_agent_service
+from askflow.agent.service import (
+    build_agent_service,
+    dispose_agent_service,
+    init_agent_service,
+    start_route_map_subscriber,
+    stop_route_map_subscriber,
+)
 from askflow.config import settings
 from askflow.core.database import engine
 from askflow.core.exceptions import register_exception_handlers
+from askflow.core.logging import get_logger
 from askflow.core.middleware import setup_middleware
 from askflow.core.redis import redis_client
+from askflow.rag.bm25 import bm25_index
 from askflow.rag.llm_client import llm_client
+from askflow.rag.vector_store import get_vector_store
 
 DEFAULT_SECRET_KEY = "change-me-to-a-random-secret-key"
+
+logger = get_logger(__name__)
 
 
 def _assert_production_safe_settings() -> None:
@@ -25,11 +36,40 @@ def _assert_production_safe_settings() -> None:
         )
 
 
+def _warm_bm25_index() -> None:
+    """启动期把 BM25 索引拉回内存——先吃 pickle，缺失/损坏时再从 Chroma 全量重建。"""
+    loaded = False
+    try:
+        loaded = bm25_index.load_from_file(settings.bm25_index_path)
+    except Exception as exc:
+        logger.warning("bm25_warm_load_failed", error=str(exc))
+
+    if loaded:
+        logger.info("bm25_loaded_from_file", size=bm25_index.size)
+        return
+
+    try:
+        vector_store = get_vector_store()
+    except Exception as exc:
+        logger.warning("bm25_warm_skipped_no_vector_store", error=str(exc))
+        return
+
+    count = bm25_index.rebuild_from_vector_store(vector_store)
+    if count > 0:
+        try:
+            bm25_index.save_to_file(settings.bm25_index_path)
+        except Exception as exc:
+            logger.warning("bm25_warm_persist_failed", error=str(exc))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """在应用生命周期内初始化并释放共享基础设施。"""
     _assert_production_safe_settings()
     await redis_client.initialize()
+    _warm_bm25_index()
+    # 跨 worker 路由失效广播——subscriber 必须在 Redis 初始化之后启动。
+    start_route_map_subscriber()
 
     # 应用启动期一次性装配 AgentService（embedder / vector_store / retriever /
     # reranker / RAG / IntentClassifier / AgentGraph），避免每条用户消息都重建整条栈。
@@ -40,6 +80,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await stop_route_map_subscriber()
         dispose_agent_service()
         await llm_client.close()
         await engine.dispose()

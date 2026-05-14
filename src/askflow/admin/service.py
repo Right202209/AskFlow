@@ -4,7 +4,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from askflow.agent.service import invalidate_route_map_cache
+from askflow.agent.service import invalidate_route_map_cache, publish_route_map_invalidation
 from askflow.core.logging import get_logger
 from askflow.models.document import DocumentStatus
 from askflow.repositories.document_repo import DocumentRepo
@@ -32,16 +32,19 @@ class AdminService:
     async def create_intent_config(self, **kwargs):
         config = await self._intent_repo.create(**kwargs)
         invalidate_route_map_cache()
+        await publish_route_map_invalidation()
         return config
 
     async def update_intent_config(self, config_id: uuid.UUID, **kwargs):
         config = await self._intent_repo.update(config_id, **kwargs)
         if config:
             invalidate_route_map_cache()
+            await publish_route_map_invalidation()
         return config
 
     async def delete_intent_config(self, config_id: uuid.UUID) -> bool:
         deleted = await self._intent_repo.delete(config_id)
         if deleted:
             invalidate_route_map_cache()
+            await publish_route_map_invalidation()
         return deleted

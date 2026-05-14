@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -8,6 +10,7 @@ from askflow.agent.harness import CognitiveHarness
 from askflow.agent.intent_classifier import DEFAULT_INTENT, IntentClassifier
 from askflow.agent.nodes import rag_stream_node, route_by_intent
 from askflow.core.logging import get_logger
+from askflow.core.redis import redis_client
 from askflow.embedding.embedder import create_embedder
 from askflow.rag.llm_client import llm_client
 from askflow.rag.reranker import Reranker
@@ -20,13 +23,21 @@ from askflow.ticket.service import TicketService
 
 logger = get_logger(__name__)
 
+# Redis pub/sub channel——任何 worker 写完意图配置都向这里发"invalidate"。
+ROUTE_MAP_INVALIDATE_CHANNEL = "askflow:route_map:invalidate"
+# 本地缓存 TTL：即便 pub/sub 漏消息，60s 也能最终一致。
+ROUTE_MAP_CACHE_TTL_SECONDS = 60.0
+
 _route_map_cache: dict[str, str] | None = None
+_route_map_cache_at: float = 0.0
+_route_map_subscriber_task: asyncio.Task | None = None
 
 
 async def _load_route_map() -> dict[str, str]:
-    """缓存读取生效中的意图路由配置，减少每次请求都查库。"""
-    global _route_map_cache
-    if _route_map_cache is not None:
+    """缓存读取生效中的意图路由配置；本地 TTL + Redis 失效广播保持跨 worker 一致。"""
+    global _route_map_cache, _route_map_cache_at
+    now = time.monotonic()
+    if _route_map_cache is not None and now - _route_map_cache_at < ROUTE_MAP_CACHE_TTL_SECONDS:
         return _route_map_cache
     try:
         from askflow.core.database import async_session_factory
@@ -39,12 +50,74 @@ async def _load_route_map() -> dict[str, str]:
     except Exception as e:
         logger.warning("failed_to_load_route_map", error=str(e))
         _route_map_cache = {}
+    _route_map_cache_at = now
     return _route_map_cache
 
 
 def invalidate_route_map_cache() -> None:
-    global _route_map_cache
+    """清本地缓存——下一次 _load_route_map 会从 DB 重新拉。"""
+    global _route_map_cache, _route_map_cache_at
     _route_map_cache = None
+    _route_map_cache_at = 0.0
+
+
+async def publish_route_map_invalidation() -> None:
+    """通过 Redis 通知其他 worker 也清缓存。Redis 不可用直接吞——TTL 60s 兜底。"""
+    try:
+        await redis_client.pool.publish(ROUTE_MAP_INVALIDATE_CHANNEL, "invalidate")
+    except Exception as e:
+        logger.warning("route_map_invalidate_publish_failed", error=str(e))
+
+
+async def _route_map_invalidate_listener() -> None:
+    """订阅 invalidate 频道；任何消息进来都让本地缓存失效。"""
+    try:
+        pubsub = redis_client.pool.pubsub()
+    except Exception as e:
+        logger.warning("route_map_subscriber_init_failed", error=str(e))
+        return
+
+    try:
+        await pubsub.subscribe(ROUTE_MAP_INVALIDATE_CHANNEL)
+        async for message in pubsub.listen():
+            if not message or message.get("type") != "message":
+                continue
+            invalidate_route_map_cache()
+            logger.info("route_map_cache_invalidated_via_pubsub")
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.warning("route_map_subscriber_error", error=str(e))
+    finally:
+        try:
+            await pubsub.unsubscribe(ROUTE_MAP_INVALIDATE_CHANNEL)
+            await pubsub.aclose()
+        except Exception:
+            pass
+
+
+def start_route_map_subscriber() -> asyncio.Task:
+    """lifespan 启动期挂上后台订阅协程，已存在则复用。"""
+    global _route_map_subscriber_task
+    if _route_map_subscriber_task and not _route_map_subscriber_task.done():
+        return _route_map_subscriber_task
+    _route_map_subscriber_task = asyncio.create_task(_route_map_invalidate_listener())
+    return _route_map_subscriber_task
+
+
+async def stop_route_map_subscriber() -> None:
+    """lifespan 关停期取消后台订阅协程，避免悬挂连接。"""
+    global _route_map_subscriber_task
+    task = _route_map_subscriber_task
+    _route_map_subscriber_task = None
+    if task and not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning("route_map_subscriber_stop_error", error=str(e))
 
 
 class ProcessResult:

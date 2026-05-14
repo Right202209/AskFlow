@@ -51,6 +51,15 @@ class VectorStore:
     def delete_by_doc_id(self, doc_id: str) -> None:
         self._collection.delete(where={"doc_id": doc_id})
 
+    def get_all_chunks(self) -> dict:
+        """全量取回 collection 内的 chunk 文本与元数据——BM25 索引冷启动时使用。"""
+        result = self._collection.get(include=["documents", "metadatas"])
+        return {
+            "ids": result.get("ids") or [],
+            "documents": result.get("documents") or [],
+            "metadatas": result.get("metadatas") or [],
+        }
+
     @property
     def count(self) -> int:
         return self._collection.count()
