@@ -2,6 +2,8 @@
 
 [中文](README_zh.md)
 
+> Positioning: AskFlow is a single-tenant, self-hosted reference implementation of RAG + Agent + Ticket for internal customer-support teams. It is **not** a multi-tenant SaaS — no tenant isolation, billing, SLA, or audit logging is implemented.
+
 AskFlow is an intelligent customer support system built around FastAPI, RAG, and an intent-routing agent layer. This repository contains both the backend application under `src/askflow/` and the React frontend under `web/`.
 
 ## Current Snapshot
@@ -203,7 +205,6 @@ Use `/docs` for the complete schema.
 
 - `npm run build` in `web/` passes as of 2026-04-06
 - `make test` assumes project dependencies are available on your shell `PATH`; activate `.venv` or install the project first with `make install`
-- a direct virtualenv pytest run surfaced backend test failures, so the backend suite should not currently be treated as green
 
 ## Documentation
 

@@ -23,9 +23,7 @@ class CognitiveHarnessPolicy:
     max_response_chars: int = 8000
     low_confidence_threshold: float = 0.5
     fallback_route: str = "rag"
-    allowed_routes: frozenset[str] = frozenset(
-        {"rag", "ticket", "handoff", "clarify", "tool"}
-    )
+    allowed_routes: frozenset[str] = frozenset({"rag", "ticket", "handoff", "clarify", "tool"})
     allowed_history_roles: frozenset[str] = frozenset({"user", "assistant"})
     prompt_control_patterns: tuple[str, ...] = (
         r"ignore\s+(all\s+)?previous\s+instructions",
@@ -37,8 +35,7 @@ class CognitiveHarnessPolicy:
     empty_input_response: str = "请先描述您的问题，我会帮您查询、报修或转接人工客服。"
     too_long_response: str = "您的问题内容过长，请拆成更短的问题后再发送。"
     prompt_control_response: str = (
-        "我不能处理绕过系统约束或获取内部提示的请求。"
-        "请直接描述需要查询、报修或转人工的问题。"
+        "我不能处理绕过系统约束或获取内部提示的请求。请直接描述需要查询、报修或转人工的问题。"
     )
     fallback_response: str = "抱歉，暂时无法生成有效回复，请稍后再试。"
     response_truncated_notice: str = "\n回复内容较长，已根据服务输出预算截断。"

@@ -38,9 +38,7 @@ async def process_user_message(
         conv_repo = ConversationRepo(db)
         msg_repo = MessageRepo(db)
 
-        conv_uuid = await _ensure_conversation(
-            conv_repo, conversation_id, user_id, connection_id
-        )
+        conv_uuid = await _ensure_conversation(conv_repo, conversation_id, user_id, connection_id)
         if conv_uuid is None:
             return
         conversation_id = str(conv_uuid)

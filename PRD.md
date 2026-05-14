@@ -1,6 +1,6 @@
 # PRD：AskFlow — 智能客服系统（RAG + Agent）
 
-> 文档更新时间：2026-04-06
+> 文档更新时间：2026-04-17
 >
 > 说明：本 PRD 描述产品目标与目标架构。当前仓库的实现状态请查看 `docs/status/PROJECT_STATUS.md`。为避免文档漂移，本版已同步仓库当前采用的前端与 Agent 落地方案：前端使用 React 19 + Vite，Agent 编排当前使用自定义 `AgentGraph`。
 

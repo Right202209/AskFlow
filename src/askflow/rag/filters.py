@@ -37,9 +37,7 @@ class RetrievalFilters:
             )
 
     def is_empty(self) -> bool:
-        return not any(
-            [self.sources, self.doc_ids, self.indexed_after, self.indexed_before]
-        )
+        return not any([self.sources, self.doc_ids, self.indexed_after, self.indexed_before])
 
     def to_chroma_where(self) -> dict | None:
         """构造 Chroma `where` 子句。多个条件用 $and 合并。"""
@@ -49,13 +47,9 @@ class RetrievalFilters:
         if self.doc_ids:
             clauses.append({"doc_id": {"$in": self.doc_ids}})
         if self.indexed_after is not None:
-            clauses.append(
-                {"indexed_at_epoch": {"$gte": int(self.indexed_after.timestamp())}}
-            )
+            clauses.append({"indexed_at_epoch": {"$gte": int(self.indexed_after.timestamp())}})
         if self.indexed_before is not None:
-            clauses.append(
-                {"indexed_at_epoch": {"$lte": int(self.indexed_before.timestamp())}}
-            )
+            clauses.append({"indexed_at_epoch": {"$lte": int(self.indexed_before.timestamp())}})
         if not clauses:
             return None
         if len(clauses) == 1:
