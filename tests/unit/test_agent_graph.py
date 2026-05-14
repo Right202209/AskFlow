@@ -34,10 +34,11 @@ class TestAgentGraph:
 
     @pytest.mark.asyncio
     async def test_run_returns_ticket_unavailable_when_service_missing(self):
-        graph = AgentGraph(MagicMock(), MagicMock(), ticket_service=None)
+        graph = AgentGraph(MagicMock(), MagicMock())
         state = AgentState(intent=IntentResult(label="fault_report", confidence=0.9))
 
-        result = await graph.run(state, route_map={})
+        # ticket_service 通过 run() 参数注入；不传时走"工单暂不可用"兜底。
+        result = await graph.run(state, ticket_service=None, route_map={})
 
         assert result.response_tokens == ["工单服务暂不可用，请联系人工客服。"]
 

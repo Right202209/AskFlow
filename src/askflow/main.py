@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from askflow.agent.service import build_agent_service, dispose_agent_service, init_agent_service
 from askflow.config import settings
 from askflow.core.database import engine
 from askflow.core.exceptions import register_exception_handlers
@@ -29,9 +30,17 @@ async def lifespan(app: FastAPI):
     """在应用生命周期内初始化并释放共享基础设施。"""
     _assert_production_safe_settings()
     await redis_client.initialize()
+
+    # 应用启动期一次性装配 AgentService（embedder / vector_store / retriever /
+    # reranker / RAG / IntentClassifier / AgentGraph），避免每条用户消息都重建整条栈。
+    agent_service = build_agent_service()
+    init_agent_service(agent_service)
+    app.state.agent_service = agent_service
+
     try:
         yield
     finally:
+        dispose_agent_service()
         await llm_client.close()
         await engine.dispose()
         await redis_client.close()

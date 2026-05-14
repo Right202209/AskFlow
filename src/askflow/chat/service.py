@@ -52,10 +52,9 @@ async def process_user_message(
         )
 
         ticket_service = TicketService(TicketRepo(db))
-        agent_service = get_agent_service(
-            ticket_service=ticket_service,
-            conversation_repo=conv_repo,
-        )
+        # 单例 AgentService 在 lifespan 启动时已装配；这里只把请求级的 DB-bound
+        # 依赖（ticket service / conversation repo）通过 process() 参数注入。
+        agent_service = get_agent_service()
 
         response_text, intent_result, sources, harness_trace = await _stream_agent_response(
             agent_service=agent_service,
@@ -65,6 +64,8 @@ async def process_user_message(
             history=history,
             user_id=user_id,
             is_cancelled=is_cancelled,
+            ticket_service=ticket_service,
+            conversation_repo=conv_repo,
         )
 
         await session_store.add_message(conversation_id, "assistant", response_text)
@@ -146,6 +147,9 @@ async def _stream_agent_response(
     history: list[dict[str, str]],
     user_id: uuid.UUID,
     is_cancelled: Callable[[], bool],
+    *,
+    ticket_service=None,
+    conversation_repo=None,
 ) -> tuple[str, object, list, dict]:
     """驱动 Agent 并推送 intent / token / ticket / handoff 事件。"""
     full_response: list[str] = []
@@ -159,6 +163,8 @@ async def _stream_agent_response(
             conversation_history=history,
             user_id=str(user_id),
             conversation_id=conversation_id,
+            ticket_service=ticket_service,
+            conversation_repo=conversation_repo,
         )
         if result.harness_trace:
             harness_trace = result.harness_trace

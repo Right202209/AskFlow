@@ -22,6 +22,7 @@ async def classify_intent(
     body: ClassifyRequest,
     user: User = Depends(get_current_user),
 ):
+    # 直接复用启动期装配好的 AgentService 单例，避免每条 /classify 都重建整条 RAG 栈。
     service = get_agent_service()
     result = await service._classifier.classify(body.message, body.context)
     return APIResponse(data=result)

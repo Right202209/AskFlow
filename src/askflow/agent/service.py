@@ -80,27 +80,22 @@ class ProcessResult:
 
 
 class AgentService:
-    """协调意图分类、路由决策和最终响应流的输出。"""
+    """协调意图分类、路由决策和最终响应流的输出。
+
+    依赖装配只在应用启动时做一次。需要 DB 的 ticket_service / conversation_repo
+    每条请求通过 process() 的参数传入——它们与请求级 AsyncSession 绑定，不能跨请求复用。
+    """
 
     def __init__(
         self,
         classifier: IntentClassifier,
         rag_service: RAGService,
-        ticket_service: TicketService | None = None,
-        conversation_repo: ConversationRepo | None = None,
         harness: CognitiveHarness | None = None,
     ) -> None:
         self._classifier = classifier
         self._rag_service = rag_service
-        self._ticket_service = ticket_service
-        self._conversation_repo = conversation_repo
         self._harness = harness or CognitiveHarness()
-        self._graph = AgentGraph(
-            classifier,
-            rag_service,
-            ticket_service=ticket_service,
-            conversation_repo=conversation_repo,
-        )
+        self._graph = AgentGraph(classifier, rag_service)
 
     async def process(
         self,
@@ -108,6 +103,9 @@ class AgentService:
         conversation_history: list[dict[str, str]] | None = None,
         user_id: str = "",
         conversation_id: str = "",
+        *,
+        ticket_service: TicketService | None = None,
+        conversation_repo: ConversationRepo | None = None,
     ) -> ProcessResult:
         """返回 ProcessResult，包含响应 token 流、引用来源、意图及副作用元数据。"""
         prepared = self._harness.prepare(
@@ -161,7 +159,12 @@ class AgentService:
                     harness_trace=state.harness_trace,
                 )
 
-        state = await self._graph.run(state, route_map=route_map)
+        state = await self._graph.run(
+            state,
+            ticket_service=ticket_service,
+            conversation_repo=conversation_repo,
+            route_map=route_map,
+        )
         state = self._harness.finalize_state(state)
 
         return ProcessResult(
@@ -182,11 +185,26 @@ class AgentService:
             await asyncio.sleep(0.05)
 
 
-def get_agent_service(
-    ticket_service: TicketService | None = None,
-    conversation_repo: ConversationRepo | None = None,
-) -> AgentService:
-    """构造默认的 Agent 依赖装配，供路由层复用。"""
+# 模块级单例：lifespan 启动期通过 init_agent_service() 注入，调用方走 get_agent_service()。
+_agent_service_singleton: AgentService | None = None
+
+
+def init_agent_service(service: AgentService) -> None:
+    """让应用启动期把组装好的 AgentService 挂到模块单例上。
+
+    重复调用会覆盖现有单例——这只在测试里有意义；生产路径只在 lifespan 调一次。
+    """
+    global _agent_service_singleton
+    _agent_service_singleton = service
+
+
+def dispose_agent_service() -> None:
+    global _agent_service_singleton
+    _agent_service_singleton = None
+
+
+def build_agent_service() -> AgentService:
+    """构造一份默认 Agent 装配——给 lifespan 与测试共用。"""
     embedder = create_embedder()
     try:
         vector_store = get_vector_store()
@@ -197,9 +215,14 @@ def get_agent_service(
     reranker = Reranker()
     rag_service = RAGService(retriever, reranker, llm_client) if retriever else None
     classifier = IntentClassifier(llm_client)
-    return AgentService(
-        classifier,
-        rag_service,
-        ticket_service=ticket_service,
-        conversation_repo=conversation_repo,
-    )
+    return AgentService(classifier, rag_service)
+
+
+def get_agent_service() -> AgentService:
+    """返回启动期注入的单例。未初始化时按需懒装配——给单元测试兜底。"""
+    global _agent_service_singleton
+    if _agent_service_singleton is None:
+        # 兜底装配：让单测/管理路由（/agent/classify）即使在没有 lifespan 的场景下也能跑。
+        # 真实部署路径会被 lifespan 的 init_agent_service() 提前覆盖掉。
+        _agent_service_singleton = build_agent_service()
+    return _agent_service_singleton
