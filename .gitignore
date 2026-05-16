@@ -15,6 +15,7 @@ htmlcov/
 CLAUDE.md
 .claude
 .codex
+.trellis/
 web/tsconfig.tsbuildinfo
 web/dist/
 static/dist/
