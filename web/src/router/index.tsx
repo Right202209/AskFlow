@@ -9,6 +9,7 @@ import { TicketDetailPage } from "@/pages/App/TicketDetailPage";
 import { DashboardPage } from "@/pages/Admin/DashboardPage";
 import { DocumentsPage } from "@/pages/Admin/DocumentsPage";
 import { IntentsPage } from "@/pages/Admin/IntentsPage";
+import { TicketDashboard } from "@/pages/Admin/TicketDashboard";
 import { TicketsOverviewPage } from "@/pages/Admin/TicketsOverviewPage";
 
 export const router = createBrowserRouter([
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
         children: [
           { path: "/admin/dashboard", element: <DashboardPage /> },
           { path: "/admin/tickets", element: <TicketsOverviewPage /> },
+          { path: "/admin/tickets/dashboard", element: <TicketDashboard /> },
           { path: "/admin/documents", element: <DocumentsPage /> },
           { path: "/admin/intents", element: <IntentsPage /> },
         ],

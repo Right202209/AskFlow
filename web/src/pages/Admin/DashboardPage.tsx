@@ -58,6 +58,13 @@ export function DashboardPage() {
     value,
   }));
 
+  const reasonData = Object.entries(analytics.harness_reason_distribution ?? {})
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+  const flagData = Object.entries(analytics.harness_flag_distribution ?? {})
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-xl font-semibold">数据看板</h1>
@@ -142,6 +149,47 @@ export function DashboardPage() {
           <p className="mt-1 text-xs text-muted-foreground">
             最近 7 天的差评率 ({analytics.feedback_total_7d} 条反馈)
           </p>
+        </div>
+      </div>
+
+      {/* Phase 2 项 10:harness 拦截按 reason / flag 分类型,定位"哪类拦截在涨"。 */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-lg border p-4">
+          <h3 className="text-sm font-medium">Harness 拦截原因分布</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            按 harness_trace.reason 聚合(assistant 消息)。
+          </p>
+          {reasonData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={reasonData} layout="vertical" margin={{ left: 24 }}>
+                <XAxis type="number" tick={{ fontSize: 12 }} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#ef4444" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-12 text-center text-sm text-muted-foreground">暂无拦截</p>
+          )}
+        </div>
+
+        <div className="rounded-lg border p-4">
+          <h3 className="text-sm font-medium">Harness 拦截标志分布</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            按 harness_trace.flags[] 展平聚合,一条消息可命中多项。
+          </p>
+          {flagData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={flagData} layout="vertical" margin={{ left: 24 }}>
+                <XAxis type="number" tick={{ fontSize: 12 }} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="value" fill="#a855f7" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="py-12 text-center text-sm text-muted-foreground">暂无标志</p>
+          )}
         </div>
       </div>
     </div>

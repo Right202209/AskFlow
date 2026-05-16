@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Plus, Pencil } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
 import { useAdminStore } from "@/stores/adminStore";
 import { useAuthStore } from "@/stores/authStore";
 import { toastError, toastSuccess } from "@/stores/toastStore";
@@ -12,10 +12,30 @@ export function IntentsPage() {
   const isAdmin = role === "admin";
   const [editingIntent, setEditingIntent] = useState<IntentConfig | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchIntents();
   }, [fetchIntents]);
+
+  const handleDelete = async (intent: IntentConfig) => {
+    const confirmed = window.confirm(
+      `确定删除意图「${intent.display_name || intent.name}」吗？此操作不可撤销。`,
+    );
+    if (!confirmed) return;
+
+    setDeletingId(intent.id);
+    try {
+      await adminService.deleteIntent(intent.id);
+      toastSuccess("意图已删除");
+      await fetchIntents();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "删除失败";
+      toastError("删除失败", message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -67,13 +87,27 @@ export function IntentsPage() {
                   <td className="px-4 py-3 text-muted-foreground">{intent.priority}</td>
                   {isAdmin && (
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => setEditingIntent(intent)}
-                        className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                        title="编辑"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setEditingIntent(intent)}
+                          className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                          title="编辑"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(intent)}
+                          disabled={deletingId === intent.id}
+                          className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                          title="删除"
+                        >
+                          {deletingId === intent.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>

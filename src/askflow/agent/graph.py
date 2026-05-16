@@ -64,7 +64,7 @@ class AgentGraph:
         elif route == "handoff":
             state = await handoff_node(state, conversation_repo)
         elif route == "tool":
-            state = await tool_node(state)
+            state = await tool_node(state, rag_service=self._rag_service)
         elif route == "clarify":
             state = await clarify_node(state)
 

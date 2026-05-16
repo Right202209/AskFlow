@@ -5,6 +5,7 @@ import {
   BarChart3,
   FileText,
   Settings,
+  LayoutDashboard,
   LogOut,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -14,6 +15,7 @@ const allMenuItems = [
   { label: "智能问答", path: "/app/chat", icon: MessageSquare },
   { label: "我的工单", path: "/app/tickets", icon: Ticket },
   { label: "数据看板", path: "/admin/dashboard", icon: BarChart3, roles: ["agent", "admin"] },
+  { label: "工单看板", path: "/admin/tickets/dashboard", icon: LayoutDashboard, roles: ["agent", "admin"] },
   { label: "工单总览", path: "/admin/tickets", icon: Ticket, roles: ["agent", "admin"] },
   { label: "文档管理", path: "/admin/documents", icon: FileText, roles: ["agent", "admin"] },
   { label: "意图配置", path: "/admin/intents", icon: Settings, roles: ["agent", "admin"] },
@@ -45,6 +47,9 @@ export function AppLayout() {
             <NavLink
               key={item.path}
               to={item.path}
+              // 父路径(/admin/tickets)会默认匹配子路径(/admin/tickets/dashboard),
+              // 加 end 让它只在精确匹配时高亮,避免子路由切换时两个菜单同时点亮。
+              end={item.path === "/admin/tickets"}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",

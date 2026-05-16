@@ -57,6 +57,7 @@ class TestRAGService:
         assert result.sources == [
             {
                 "title": "Password Reset",
+                "source": "",
                 "chunk": "Reset your password from the account settings page.",
                 "score": 0.91,
             }

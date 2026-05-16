@@ -1,10 +1,14 @@
 import { apiClient } from "./api";
-import type { AnalyticsData } from "@/types/admin";
+import type { AnalyticsData, TicketDashboardData } from "@/types/admin";
 import type { IntentConfig, CreateIntentRequest, UpdateIntentRequest } from "@/types/intent";
 import type { Ticket, TicketStatus } from "@/types/ticket";
 
 export async function getAnalytics(): Promise<AnalyticsData> {
   return apiClient<AnalyticsData>("/api/v1/admin/analytics");
+}
+
+export async function getTicketDashboard(): Promise<TicketDashboardData> {
+  return apiClient<TicketDashboardData>("/api/v1/admin/tickets/dashboard");
 }
 
 export async function getIntents(): Promise<IntentConfig[]> {
@@ -26,6 +30,10 @@ export async function updateIntent(
     method: "PUT",
     body: JSON.stringify(data),
   });
+}
+
+export async function deleteIntent(id: string): Promise<void> {
+  await apiClient(`/api/v1/admin/intents/${id}`, { method: "DELETE" });
 }
 
 export async function getAdminTickets(

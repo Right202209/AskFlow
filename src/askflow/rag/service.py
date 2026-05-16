@@ -50,7 +50,12 @@ class RAGService:
         results = await self._retriever.retrieve(question, top_k=top_k * 2, filters=filters)
         results = await self._reranker.rerank(question, results, top_k=top_k)
         sources = [
-            {"title": r.metadata.get("title", ""), "chunk": r.document[:200], "score": r.score}
+            {
+                "title": r.metadata.get("title", ""),
+                "source": r.metadata.get("source", ""),
+                "chunk": r.document[:200],
+                "score": r.score,
+            }
             for r in results
         ]
 
@@ -75,7 +80,12 @@ class RAGService:
         results = await self._retriever.retrieve(question, top_k=top_k * 2, filters=filters)
         results = await self._reranker.rerank(question, results, top_k=top_k)
         sources = [
-            {"title": r.metadata.get("title", ""), "chunk": r.document[:200], "score": r.score}
+            {
+                "title": r.metadata.get("title", ""),
+                "source": r.metadata.get("source", ""),
+                "chunk": r.document[:200],
+                "score": r.score,
+            }
             for r in results
         ]
         messages = build_rag_prompt(question, results, conversation_history)

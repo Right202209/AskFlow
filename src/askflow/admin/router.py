@@ -5,14 +5,14 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from askflow.admin.analytics import get_analytics
+from askflow.admin.analytics import get_analytics, get_ticket_dashboard
 from askflow.admin.service import AdminService
 from askflow.core.auth import get_current_user, require_role
 from askflow.core.database import get_db
 from askflow.core.security import create_access_token, hash_password, verify_password
 from askflow.models.user import User, UserRole
 from askflow.repositories.user_repo import UserRepo
-from askflow.schemas.admin import AnalyticsResponse
+from askflow.schemas.admin import AnalyticsResponse, TicketDashboardResponse
 from askflow.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from askflow.schemas.common import APIResponse, PaginatedResponse
 from askflow.schemas.document import DocumentResponse
@@ -159,4 +159,14 @@ async def analytics(
     user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
 ):
     data = await get_analytics(db)
+    return APIResponse(data=data)
+
+
+@router.get("/tickets/dashboard", response_model=APIResponse[TicketDashboardResponse])
+async def ticket_dashboard(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+):
+    """工单系统级看板:open 总数、SLA 超时、按优先级与最近 7 天进出趋势。"""
+    data = await get_ticket_dashboard(db)
     return APIResponse(data=data)

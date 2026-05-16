@@ -138,11 +138,16 @@ async def handoff_node(
     return state
 
 
-async def tool_node(state: AgentState, llm_client=None) -> AgentState:
+async def tool_node(
+    state: AgentState,
+    llm_client=None,
+    rag_service: RAGService | None = None,
+) -> AgentState:
     """业务查询工具调用节点。
 
     通过 LLM 提取查询参数，调用对应的业务接口并返回格式化结果。
-    目前支持的工具：order_query（订单查询）。后续可通过注册表扩展。
+    目前支持的工具：order_query（订单查询）、knowledge_search（知识检索）。
+    后续可通过注册表扩展。
     """
     from askflow.agent.tools import execute_tool
 
@@ -155,6 +160,7 @@ async def tool_node(state: AgentState, llm_client=None) -> AgentState:
             user_id=state.user_id,
             conversation_history=state.conversation_history,
             llm_client=llm_client,
+            rag_service=rag_service,
         )
         state.tool_result = result
         state.response_tokens = [result.get("display", "查询完成，暂无更多信息。")]

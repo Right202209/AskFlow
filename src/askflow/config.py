@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Rate Limiting
     rate_limit_per_minute: int = 60
 
+    # Ticket SLA——pending/processing 工单超过该时长记为 SLA 超时,运营 dashboard 据此告警。
+    ticket_sla_hours: int = 24
+
     # CORS
     cors_origins: list[str] = ["http://localhost:5173"]
 

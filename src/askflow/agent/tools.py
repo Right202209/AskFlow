@@ -123,9 +123,31 @@ async def search_order(order_id: str) -> dict:
     return payload
 
 
-async def search_knowledge(query: str) -> list[dict]:
+async def search_knowledge(
+    query: str,
+    rag_service: Any | None = None,
+    top_k: int = 5,
+) -> list[dict]:
+    """调 RAGService.query 返回 top-k chunk；rag_service 缺失时退回空列表。"""
     logger.info("tool_search_knowledge", query=query)
-    return []
+    if rag_service is None:
+        return []
+    try:
+        result = await rag_service.query(question=query, top_k=top_k)
+    except Exception as e:
+        logger.warning("tool_search_knowledge_failed", error=str(e))
+        return []
+    chunks: list[dict] = []
+    for s in result.sources or []:
+        chunks.append(
+            {
+                "title": s.get("title", ""),
+                "source": s.get("source", ""),
+                "content": s.get("chunk", ""),
+                "score": s.get("score"),
+            }
+        )
+    return chunks
 
 
 TOOLS = {
@@ -138,6 +160,9 @@ TOOLS = {
 # ---------------------------------------------------------------------------
 _INTENT_TOOL_MAP: dict[str, str] = {
     "order_query": "search_order",
+    # admin 可配置 name=knowledge_search/kb_search、route_target=tool 触发知识检索工具
+    "knowledge_search": "search_knowledge",
+    "kb_search": "search_knowledge",
 }
 
 
@@ -155,12 +180,25 @@ def _format_order_display(raw: dict) -> str:
     return base
 
 
+def _format_knowledge_display(chunks: list[dict]) -> str:
+    """把 RAG 召回片段拼成可读的回答，命中为空时给出兜底文案。"""
+    if not chunks:
+        return "暂未在知识库中检索到相关内容，请尝试换种说法或补充关键词。"
+    lines: list[str] = ["以下是与您问题相关的知识库片段："]
+    for idx, chunk in enumerate(chunks, start=1):
+        title = chunk.get("title") or "（无标题）"
+        content = (chunk.get("content") or "").strip()
+        lines.append(f"{idx}. 【{title}】{content}")
+    return "\n".join(lines)
+
+
 async def execute_tool(
     tool_name: str,
     question: str,
     user_id: str,
     conversation_history: list[dict[str, str]],
     llm_client: Any | None = None,
+    rag_service: Any | None = None,
 ) -> dict[str, Any]:
     """根据意图标签执行对应的业务工具。
 
@@ -194,6 +232,10 @@ async def execute_tool(
         order_id = match.group(0)
         raw = await handler(order_id)
         return {"display": _format_order_display(raw), "tool": mapped, "raw": raw}
+
+    if mapped == "search_knowledge":
+        chunks = await handler(question, rag_service=rag_service)
+        return {"display": _format_knowledge_display(chunks), "tool": mapped, "raw": chunks}
 
     # 默认：直接把 question 传入
     raw = await handler(question)
