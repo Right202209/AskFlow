@@ -1,5 +1,6 @@
 # AskFlow 未实现功能清单
 
+> ⚠️ **Superseded** by [`STATUS.md`](STATUS.md) §6 as of 2026-05-16. Outstanding work is now tracked under `.trellis/tasks/`. Kept for history only — do not update.
 > 生成时间：2026-05-14
 > 范围：基于 `PRD.md`、`AGENTS.md`、`docs/status/*`、`docs/audits/*`、`README.md` 等文档逐项对照代码现状
 > 用途：开发排期与文档同步的单一事实源；每项均给出"文档出处"+"代码状态"双向引用
@@ -15,6 +16,8 @@
 | 🔴 高 | 4 | 阻塞生产或合规上线 |
 | 🟡 中 | 5 | 影响多 worker 扩展、关键演示场景 |
 | 🟢 低 | 5 | 体验/质量/文档同步 |
+
+> 进度（2026-05-16）：Phase 1（项 8/12/13）+ Phase 2（项 9/10/11）全部完成；当前剩余 8 项，下一站推荐 Phase 3 项 1（Prompt 模板）。
 
 ---
 
@@ -85,24 +88,17 @@
   - 无 LLM 二次解析、无与前一轮对话上下文联动
 - **预期落地**：失败时回退到让 Agent 在 `clarify` 分支提问，把 message history 带上,而非工具层硬返回
 
-### 8. `search_knowledge` 工具实现
+### 8. ~~`search_knowledge` 工具实现~~ ✅ 已完成 (2026-05-16, commit `a06835d`)
 
-- **文档出处**：`AGENTS.md` 工具清单
-- **代码状态**：**已验证**完全 stub —— `src/askflow/agent/tools.py:126-128`：
-  ```python
-  async def search_knowledge(query: str) -> list[dict]:
-      logger.info("tool_search_knowledge", query=query)
-      return []
-  ```
-- **预期落地**：调用 `RAGService.query`（非 stream），返回 top-k chunk 的 `{title, source, content}` 列表;Agent 在 tool 分支可拼回答
+- `src/askflow/agent/tools.py:126-150` 已接入 `RAGService.query`，返回 `{title, source, content, score}` top-k
+- `execute_tool` 增 `search_knowledge` 分支 + `_format_knowledge_display` 拼回答；意图映射 `knowledge_search` / `kb_search`
 
-### 9. 集成 / E2E 测试补全
+### 9. ~~集成 / E2E 测试补全~~ ✅ 已完成 (2026-05-14)
 
-- **文档出处**：`docs/status/PROJECT_STATUS.md:18`
-- **代码状态**：
-  - `tests/integration/` 仅 `test_chat_websocket.py`（已完成）
-  - `tests/e2e/` 完全空（只有 `__init__.py`）
-- **预期落地**：RAG 完整链路（上传 → 索引 → 查询）、Ticket 客服流转、Admin 意图修改跨 worker 失效三个场景至少各补一条
+- `tests/integration/test_rag_pipeline.py` — 上传 → 索引 → 查询完整链路
+- `tests/integration/test_ticket_flow.py` — 工单创建 / 接管 / 流转
+- `tests/integration/test_intent_invalidation.py` — Admin 意图修改跨 worker 失效
+- `tests/e2e/` 仍仅占位（与本项 KPI 无关，按需后补浏览器级用例）
 
 ---
 
@@ -119,24 +115,19 @@
 - 字段:open 总数 / SLA 超时(`settings.ticket_sla_hours`)/ open 按优先级 / 最老未处理工单年龄 / 7 天 created vs resolved 趋势
 - 前端新增 `web/src/pages/Admin/TicketDashboard.tsx`,路由 `/admin/tickets/dashboard`,侧边栏菜单"工单看板"
 
-### 12. Admin 意图删除按钮
+### 12. ~~Admin 意图删除按钮~~ ✅ 已完成 (2026-05-16)
 
-- **文档出处**：`docs/status/PROJECT_STATUS.md:44`、`docs/audits/PRD_AUDIT.md:44`
-- **代码状态**：后端 DELETE 端点已支持；`web/src/pages/Admin/IntentsPage.tsx` 无删除 UI
-- **预期落地**：列表行加"⋮"菜单暴露删除 + 确认弹窗
+- `web/src/pages/Admin/IntentsPage.tsx:88-112` 行内删除按钮 + `window.confirm` 二次确认 + `deletingId` loading 态
+- 成功后调 `fetchIntents` 刷新；失败 toast 报错
 
-### 13. 聊天对话操作 UI（重命名 / 归档 / 删除）
+### 13. ~~聊天对话操作 UI（重命名 / 归档 / 删除）~~ ✅ 已完成 (2026-05-16)
 
-- **文档出处**：`README.md:119`（Known Frontend Gaps）
-- **代码状态**：后端接口在 `chat/router.py` 已有；前端 `ConversationList` 组件可能缺操作菜单（待 UI 核查）
-- **预期落地**：列表项右侧加菜单，调用现有接口
+- `web/src/components/chat/ConversationList.tsx:86-114` 列表项右侧三按钮（Pencil / Archive / Trash2）+ `pendingActionId` 互斥
 
-### 14. 文档时间戳与告警同步
+### 14. ~~文档时间戳与告警同步~~ ✅ 已完成 (2026-05-16)
 
-- **文档出处 / 待修**：
-  - `README.md:206` "backend tests should not be treated as green" — 已 118 passed / 59% 覆盖率（参考 `DUAL_ROLE_REVIEW_2026-05-14.md:5`），文案过时
-  - `PRD.md:3` 仍标 2026-04-06；其他文档已到 2026-04-17
-- **预期落地**：一次性同步,可与下次 PRD 主体更新合并
+- `README.md` "should not be treated as green" 字样早前已删除
+- `PRD.md:3` 文档时间戳同步至 2026-05-16
 
 ---
 

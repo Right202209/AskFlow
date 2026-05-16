@@ -1,5 +1,6 @@
 # AskFlow 状态检查报告
 
+> ⚠️ **Superseded** by [`STATUS.md`](STATUS.md) as of 2026-05-16. Kept for history only — do not update.
 > 生成时间：2026-05-14
 > 范围：只读 audit（Git / 代码改动 / Lint / 迁移 / 配置 / 前端 store / 文档 / 运行时）
 > 未执行：`make test`、`make build-web`（待人工确认后单独触发）

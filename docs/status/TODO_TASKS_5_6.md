@@ -1,5 +1,6 @@
 # AskFlow 评审落地——剩余任务（Task 5 / Task 6）
 
+> ⚠️ **Superseded** by [`STATUS.md`](STATUS.md) as of 2026-05-16. Task 5 / Task 6 已多数落地（见 commit `17229ee` / `b094a35`）。Kept for history only — do not update.
 > 创建日期：2026-05-14
 > 上下文：`docs/audits/DUAL_ROLE_REVIEW_2026-05-14.md` 红旗 #1/#2
 > 当前进度：Task 0–4 已落地并提交（参见最近 5 个 commit）。

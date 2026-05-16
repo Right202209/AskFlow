@@ -1,5 +1,6 @@
 # AskFlow Project Status
 
+> ⚠️ **Superseded** by [`STATUS.md`](STATUS.md) as of 2026-05-16. Kept for history only — do not update.
 > Last updated: 2026-04-17
 
 ## Executive Summary
