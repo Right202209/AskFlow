@@ -30,6 +30,10 @@ ROUTE_MAP_CACHE_TTL_SECONDS = 60.0
 
 _route_map_cache: dict[str, str] | None = None
 _route_map_cache_at: float = 0.0
+# 单调递增的失效序号：每次 invalidate_route_map_cache() 自加 1。_load_route_map() 在写缓存前
+# 比对自己起跑时记录的旧序号——不一致说明加载期间另一路径已经发起失效，本次结果可能与
+# 新状态不一致，绝不能写回缓存（否则会把刚被 publish 推送的新规则又"压回"旧状态）。
+_route_map_invalidate_seq: int = 0
 _route_map_subscriber_task: asyncio.Task | None = None
 
 
@@ -39,6 +43,9 @@ async def _load_route_map() -> dict[str, str]:
     now = time.monotonic()
     if _route_map_cache is not None and now - _route_map_cache_at < ROUTE_MAP_CACHE_TTL_SECONDS:
         return _route_map_cache
+
+    # 在打 DB 之前先记录失效序号——加载完之后再比一次，期间 invalidate 触发就跳过缓存写入。
+    pre_load_seq = _route_map_invalidate_seq
     try:
         from askflow.core.database import async_session_factory
         from askflow.repositories.intent_config_repo import IntentConfigRepo
@@ -46,19 +53,27 @@ async def _load_route_map() -> dict[str, str]:
         async with async_session_factory() as db:
             repo = IntentConfigRepo(db)
             configs = await repo.get_all_active()
-            _route_map_cache = {c.name: c.route_target for c in configs}
+            new_map = {c.name: c.route_target for c in configs}
     except Exception as e:
         logger.warning("failed_to_load_route_map", error=str(e))
-        _route_map_cache = {}
-    _route_map_cache_at = now
-    return _route_map_cache
+        new_map = {}
+
+    if _route_map_invalidate_seq == pre_load_seq:
+        _route_map_cache = new_map
+        _route_map_cache_at = now
+    else:
+        # 加载期间已经收到了 invalidate ——这一份快照可能已不是最新；
+        # 让下一次 _load_route_map 重新打 DB 拿真正的新值，避免把刚清掉的缓存又写回旧版本。
+        logger.info("route_map_load_skipped_due_to_concurrent_invalidate")
+    return new_map
 
 
 def invalidate_route_map_cache() -> None:
     """清本地缓存——下一次 _load_route_map 会从 DB 重新拉。"""
-    global _route_map_cache, _route_map_cache_at
+    global _route_map_cache, _route_map_cache_at, _route_map_invalidate_seq
     _route_map_cache = None
     _route_map_cache_at = 0.0
+    _route_map_invalidate_seq += 1
 
 
 async def publish_route_map_invalidation() -> None:

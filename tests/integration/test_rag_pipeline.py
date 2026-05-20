@@ -66,6 +66,15 @@ class InMemoryVectorStore:
     def delete_by_doc_id(self, doc_id: str) -> None:
         self._items = [it for it in self._items if it["metadata"].get("doc_id") != doc_id]
 
+    def delete_doc_chunks_except(self, doc_id: str, keep_ids: list[str]) -> int:
+        """匹配 VectorStore 的 add-then-swap 接口——删除该 doc_id 名下除 keep_ids 外的所有分块。"""
+        keep = set(keep_ids)
+        before = len(self._items)
+        self._items = [
+            it for it in self._items if it["metadata"].get("doc_id") != doc_id or it["id"] in keep
+        ]
+        return before - len(self._items)
+
     def get_all_chunks(self) -> dict:
         return {
             "ids": [it["id"] for it in self._items],

@@ -28,7 +28,13 @@ class TicketService:
         conversation_id: uuid.UUID | None = None,
         content: dict | None = None,
     ):
-        """创建工单；若检测到重复工单，则直接返回已有记录。"""
+        """创建工单；若检测到重复工单，则直接返回已有记录。
+
+        去重的**正确性**由 `tickets` 上的 partial unique index 与 `TicketRepo.create` 的
+        `ON CONFLICT DO NOTHING` 共同保证（见 alembic 20260519_01）。这里的 `find_duplicate`
+        只是快路径——常见场景下可避免一次到 DB 的 INSERT 往返。即使快路径漏判，repo 层冲突
+        分支也会兜回已有开放工单。
+        """
         duplicate = await self._repo.find_duplicate(user_id, title)
         if duplicate:
             logger.info("ticket_duplicate_found", existing_id=str(duplicate.id))

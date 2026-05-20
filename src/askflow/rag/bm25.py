@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 import pickle
+import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import jieba
 from filelock import FileLock, Timeout
@@ -16,13 +18,28 @@ logger = get_logger(__name__)
 _PICKLE_SCHEMA_VERSION = 1
 
 
+@dataclass(frozen=True)
+class _BM25Snapshot:
+    """BM25 索引的不可变快照——build() 整体构造后原子替换 BM25Index._snapshot。
+
+    把 ids / corpus / metadatas / bm25 绑定成一个对象后，search() 只读一次指针就能拿到
+    自洽的整组状态；这样并发 build() 替换快照也不会让 search() 看到混合两版的中间态。
+    """
+
+    ids: tuple[str, ...]
+    corpus: tuple[str, ...]
+    metadatas: tuple[dict, ...]
+    bm25: BM25Okapi | None
+
+
 class BM25Index:
     def __init__(self) -> None:
-        self._corpus: list[str] = []
-        self._tokenized: list[list[str]] = []
-        self._bm25: BM25Okapi | None = None
-        self._ids: list[str] = []
-        self._metadatas: list[dict] = []
+        # 整个索引状态都收敛到 _snapshot 这一个引用上——读路径通过本地绑定取快照后，
+        # 即便 build() 在背后替换 _snapshot 也不会破坏正在进行的检索。
+        self._snapshot: _BM25Snapshot | None = None
+        # build() 间互斥：避免两个并发 build 同时通过 jieba 切词，浪费 CPU；
+        # 即使没有锁，因为最终是单次原子赋值，也不会出现"半新半旧"的快照。
+        self._build_lock = threading.Lock()
 
     def build(
         self,
@@ -30,14 +47,19 @@ class BM25Index:
         documents: list[str],
         metadatas: list[dict] | None = None,
     ) -> None:
-        self._ids = list(ids)
-        self._corpus = list(documents)
-        self._metadatas = list(metadatas) if metadatas else [{} for _ in documents]
-        self._tokenized = [list(jieba.cut(doc)) for doc in self._corpus]
-        if self._tokenized:
-            self._bm25 = BM25Okapi(self._tokenized)
-        else:
-            self._bm25 = None
+        with self._build_lock:
+            new_ids = tuple(ids)
+            new_corpus = tuple(documents)
+            new_metas = tuple(metadatas) if metadatas else tuple({} for _ in documents)
+            tokenized = [list(jieba.cut(doc)) for doc in new_corpus]
+            bm25 = BM25Okapi(tokenized) if tokenized else None
+            # 原子指针替换：CPython 下的属性赋值在 GIL 内完成，读端不会看到撕裂状态。
+            self._snapshot = _BM25Snapshot(
+                ids=new_ids,
+                corpus=new_corpus,
+                metadatas=new_metas,
+                bm25=bm25,
+            )
 
     def search(
         self,
@@ -45,24 +67,25 @@ class BM25Index:
         top_k: int = 10,
         predicate: Callable[[dict], bool] | None = None,
     ) -> list[dict]:
-        if not self._bm25 or not self._corpus:
+        snap = self._snapshot  # 本地绑定一份快照——之后 build() 替换 _snapshot 不再干扰此次检索。
+        if snap is None or snap.bm25 is None or not snap.corpus:
             return []
         tokenized_query = list(jieba.cut(query))
-        scores = self._bm25.get_scores(tokenized_query)
+        scores = snap.bm25.get_scores(tokenized_query)
         # 先按 predicate 过滤再排序，避免过滤掉的文档挤占 top_k 名额。
         scored = [
             (idx, score)
             for idx, score in enumerate(scores)
-            if score > 0 and (predicate is None or predicate(self._metadatas[idx]))
+            if score > 0 and (predicate is None or predicate(snap.metadatas[idx]))
         ]
         scored.sort(key=lambda x: x[1], reverse=True)
         results = []
         for idx, score in scored[:top_k]:
             results.append(
                 {
-                    "id": self._ids[idx],
-                    "document": self._corpus[idx],
-                    "metadata": self._metadatas[idx],
+                    "id": snap.ids[idx],
+                    "document": snap.corpus[idx],
+                    "metadata": snap.metadatas[idx],
                     "score": float(score),
                 }
             )
@@ -70,7 +93,8 @@ class BM25Index:
 
     @property
     def size(self) -> int:
-        return len(self._corpus)
+        snap = self._snapshot
+        return len(snap.corpus) if snap is not None else 0
 
     # ------------------------------------------------------------------
     # 持久化 / 重建
@@ -78,13 +102,22 @@ class BM25Index:
 
     def save_to_file(self, path: str, *, lock_timeout: float = 5.0) -> None:
         """把当前 ids/corpus/metadatas 落到 pickle，文件锁串行化多 worker 写入。"""
+        snap = self._snapshot
+        if snap is None:
+            ids_, corpus_, metadatas_ = [], [], []
+        else:
+            ids_, corpus_, metadatas_ = (
+                list(snap.ids),
+                list(snap.corpus),
+                list(snap.metadatas),
+            )
         directory = os.path.dirname(path) or "."
         os.makedirs(directory, exist_ok=True)
         payload = {
             "version": _PICKLE_SCHEMA_VERSION,
-            "ids": self._ids,
-            "corpus": self._corpus,
-            "metadatas": self._metadatas,
+            "ids": ids_,
+            "corpus": corpus_,
+            "metadatas": metadatas_,
         }
         lock = FileLock(path + ".lock")
         try:

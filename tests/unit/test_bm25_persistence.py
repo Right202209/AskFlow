@@ -23,12 +23,18 @@ class FakeVectorStore:
         self._chunks = chunks or {"ids": [], "documents": [], "metadatas": []}
         self.deleted = []
         self.added = []
+        self.swap_deletes: list[dict] = []
 
     def get_all_chunks(self):
         return dict(self._chunks)
 
     def delete_by_doc_id(self, doc_id):
         self.deleted.append(doc_id)
+
+    def delete_doc_chunks_except(self, doc_id, keep_ids):
+        # 记录一次 swap 删除，让 add-then-delete 流程在测试里可观测。
+        self.swap_deletes.append({"doc_id": doc_id, "keep_ids": list(keep_ids)})
+        return 0
 
     def add(self, ids, embeddings, documents, metadatas=None):
         self.added.append((ids, documents, metadatas))

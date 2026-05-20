@@ -1,14 +1,15 @@
 # AskFlow Project Status
 
-> Single source of truth as of **2026-05-16**.
+> Single source of truth as of **2026-05-20**.
 > Supersedes: `PROJECT_STATUS.md` (2026-04-17) / `STATUS_CHECK_2026-05-14.md` / `UNIMPLEMENTED_2026-05-14.md` / `TODO_TASKS_5_6.md`.
 > Outstanding work is tracked under [`.trellis/tasks/`](../../.trellis/tasks/) — see §6.
 
 ## 1. Executive Summary
 
-整体进度 **🟡 黄**：核心链路（Chat / RAG / Agent / Embedding / Ticket / Admin）已可端到端运行并通过单元 + 集成测试；生产上线前仍有 14 项工作（见 §6）。
+整体进度 **🟡 黄**：核心链路（Chat / RAG / Agent / Embedding / Ticket / Admin）已可端到端运行并通过单元 + 集成测试；2026-05-19 一致性审计沉淀的硬约束已分批落库；生产上线前仍有 14 项工作（见 §6）。
 
 最关键的四类缺口：
+
 1. 运营侧 **Prompt 模板管理** 仍硬编码（任务 `05-16-prompt-template-crud`）
 2. 合规所需的 **审计日志 + PII 脱敏** 完全未建（任务 `05-16-audit-log-pii-redaction`）
 3. **Async 索引管道** 同步阻塞（任务 `05-16-async-index-pipeline`）
@@ -20,21 +21,21 @@
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Authentication | ✅ Working | register / login / current-user；JWT；RBAC；限流 |
-| Chat | ✅ Working | conversation CRUD（含 rename/archive/delete UI）/ history / WebSocket 流式 / 重连 / 心跳；router 已收敛为协议分发，生命周期在 `chat/service.py::process_user_message` |
-| RAG | ✅ Working | BM25 + 向量 + rerank hook；`RetrievalFilters`（`sources / doc_ids / indexed_after / indexed_before`，`tags` 预留）；chunk 元数据带 `source / indexed_at_epoch`（旧 chunk 需 reindex 才被过滤选中） |
-| Agent routing | ✅ Working | 6 类意图 + Router + Harness 二次校验；DB 动态路由 + Redis pub/sub 跨 worker 失效（健壮性待加固） |
-| Tools | 🟡 Partial | `search_order` 已接 webhook 适配器 + mock 兜底；`search_knowledge` 已接 RAGService；订单号未识别仍硬返回（待改 clarify 回退） |
-| Tickets | ✅ Working | create / read / update / list / 接管 / 自闭；Admin Ticket Dashboard + 单一 SLA 阈值；**主动 SLA 引擎缺失** |
-| Embedding/documents | 🟡 Working with gaps | upload / index / reindex / delete；preview/download 流缺；**同步阻塞**（待 async 化） |
-| Admin APIs | ✅ Working | analytics（含 harness reason / flag 分布）+ documents + intents + ticket dashboard |
-| Frontend | ✅ Working MVP | auth / chat / tickets / dashboard / documents / intents / ticket dashboard；**无测试框架** |
-| Tests | 🟡 Partial | 21 unit + 3 integration（RAG 链路 / Ticket 流转 / Intent 跨 worker 失效）；E2E 仅占位；前端 0 测试 |
+| Authentication | ✅ Working | register / login / current-user；JWT；RBAC；限流；`APP_ENV=production` 启动期拒绝默认 `SECRET_KEY` |
+| Chat | ✅ Working | conversation CRUD（含 rename/archive/delete UI）/ history / WebSocket 流式 / 重连 / 心跳；WS 协议已切到 `/ws + auth 帧`，legacy `/ws/{token}` 仅 `APP_ENV=development` 挂载；router 已收敛为协议分发，生命周期在 `chat/service.py::process_user_message`；`POST /messages/{message_id}/feedback` 已上 |
+| RAG | ✅ Working | BM25 + 向量 + rerank hook；`RetrievalFilters`（`sources / doc_ids / indexed_after / indexed_before`，`tags` 预留并 WARN）；chunk 元数据带 `source / indexed_at_epoch / generation`（旧 chunk 需 reindex 才被过滤选中） |
+| Agent routing | ✅ Working | 6 类意图 + Router + Harness 二次校验；DB 动态路由 + Redis pub/sub 跨 worker 失效；epoch-counter 守护加载期竞态（健壮性待加固） |
+| Tools | 🟡 Partial | `search_order` 已接 webhook 适配器 + mock 兜底（`fallback_reason` 走 `ORDER_WEBHOOK_FAILURE_COUNT`）；`search_knowledge` 已接 RAGService；订单号未识别仍硬返回（待改 clarify 回退） |
+| Tickets | ✅ Working | create / read / update / list / 接管 / 自闭；**DB-level 去重已上**（partial unique index `uniq_open_user_title` + `INSERT ON CONFLICT`，alembic `20260519_01`）；Admin Ticket Dashboard + 单一 SLA 阈值；**主动 SLA 引擎缺失** |
+| Embedding/documents | 🟡 Working with gaps | upload / index / reindex / delete；add-then-swap-then-delete + per-write `generation` 已上；preview/download 流缺；**索引同步阻塞**（待 async 化） |
+| Admin APIs | ✅ Working | `analytics`（含 harness fallback/truncate rate、harness reason / flag 分布、👎 7d 率）+ documents + intents（CRUD 触发 `invalidate_route_map_cache` + Redis publish）+ ticket dashboard（SLA breach / 优先级 / 7 日 trend） |
+| Frontend | ✅ Working MVP | auth / chat / tickets / dashboard / documents / intents / ticket overview + dashboard；toast store 已上；**无测试框架** |
+| Tests | 🟡 Partial | 25 unit + 4 integration（RAG / Ticket / Intent 跨 worker / WS）；新增：`test_bm25_concurrency` / `test_embedding_pipeline_crash` / `test_route_map_epoch` / `test_ticket_repo_conflict`；E2E 仅占位；前端 0 测试 |
 | DevOps/ops | 🟡 Partial | `docker-compose` + Makefile；CI（GitHub Actions / CodeQL）2026-05-14 起就位；**无 prod manifest / 无 Grafana dashboard / 无告警规则** |
-| Observability | 🟡 Partial | `/metrics` Prometheus；intent / order webhook 失败 / harness reason 计数器；**告警未配置** |
+| Observability | 🟡 Partial | `/metrics` Prometheus；`INTENT_CLASSIFICATION_COUNT` / `ORDER_WEBHOOK_FAILURE_COUNT` / `TICKET_COUNT` / harness reason+flag 分布；**告警未配置** |
 | Compliance | 🔴 Missing | 审计日志 + PII 脱敏 0 实现 |
 | Knowledge backflow | 🔴 Missing | 👍/👎 feedback 已收，但无沉淀回 KB 的路径 |
-| Handoff | 🔴 Partial | 仅标记 `transferred` + 固定话术；无摘要 / 队列 / 超时兜底 |
+| Handoff | 🔴 Partial | 仅标记 `should_handoff=True` + 切 `conversation.status=transferred` + 固定话术；无摘要 / 队列 / 超时兜底 |
 
 ## 3. Verification Snapshot
 
@@ -48,19 +49,33 @@
 | 2026-05-14 | `ruff check` | ✅ Pass |
 | 2026-05-14 | `ruff format --check` | ❌ 3 个文件待 format（已在后续 commit 修复） |
 | 2026-05-14 | `alembic current` | ❌ 5432 拒接（本机无 docker daemon） |
-| 2026-05-14 | `alembic heads` | ✅ `20260327_01 (head)` |
+| 2026-05-14 | `alembic heads` | ✅ `20260327_01 (head)` — 之后追加 `20260514_01` + `20260519_01`，当前 head 为 `20260519_01` |
 
-**Re-run before release decisions** — none of the above commands have been re-executed in the 2026-05-16 refresh.
+**Re-run before release decisions** — none of the above commands have been re-executed in the 2026-05-20 refresh.
 
-## 4. Recent Milestones (2026-05-14 → 2026-05-16)
+## 4. Recent Milestones
+
+按 commit 倒序：
 
 | Commit | 摘要 |
 |---|---|
-| `17229ee` | BM25 索引持久化 + 路由表 Redis pub/sub 跨 worker 一致 |
-| `b094a35` | `search_order` webhook 适配器 + 评审/规划文档 |
-| `da1ef8f` | GitHub Actions（CI）+ CodeQL workflow |
-| `a0427f3` | WS 集成测试 session mock 改 AsyncMock 修复 await 失败 |
+| `0a7cf70` | docs(audits)：Wave 1 landing 表追加到 closure SOP review |
+| `b39b9ed` | docs(status)：合并 docs/status 为单一 STATUS.md |
+| `9098b6f` | docs(agents)：拆分 AGENTS.md 为业务契约 + TRELLIS.md meta |
 | `a06835d` | `search_knowledge` 工具 + Admin Ticket SLA Kanban + harness 指标 |
+| `a0427f3` | WS 集成测试 session mock 改 AsyncMock 修复 await 失败 |
+| `da1ef8f` | GitHub Actions（CI）+ CodeQL workflow |
+| `b094a35` | `search_order` webhook 适配器 + 评审/规划文档 |
+| `17229ee` | BM25 索引持久化 + 路由表 Redis pub/sub 跨 worker 一致 |
+| `21d5cbc` | AgentService 移到启动期单例 + WebSocket 集成测试 |
+| `2717d63` | `harness_trace` 落 messages.metadata + feedback 表与 👍/👎 闭环 |
+| `fdf4d57` | 收窄 handoff 关键词规则——human/agent 必须有上下文词共现 |
+| `2028fdc` | fail-safe：legacy WS 仅 dev 挂载、`APP_ENV` 默认 production |
+| `e6231ff` | WebSocket auth-frame protocol + secret_key startup guard |
+| `a2028bc` | 抽出 chat message lifecycle + RAG retrieval filters |
+| `96336c0` | Cognitive Harness（输入/路由/输出三段控制） |
+
+**2026-05-19 新增**：[`docs/audits/IMPLICIT_CONSTRAINTS_AUDIT_2026-05-19.md`](../audits/IMPLICIT_CONSTRAINTS_AUDIT_2026-05-19.md) + alembic `20260519_01_ticket_open_unique.py` + `tests/unit/test_{bm25_concurrency,embedding_pipeline_crash,route_map_epoch,ticket_repo_conflict}.py`。
 
 ## 5. Key Risks
 
@@ -70,10 +85,11 @@
 2. **🔴 大文件上传 API 锁住** — 索引同步阻塞；100MB 文档会让 worker 长时间不响应。
 3. **🟡 Prompt 改动需重新部署** — 运营自助能力为 0。
 4. **🟡 前端 0 测试** — 任何 chat / store / hook 改动靠人眼回归。
-5. **🟡 多 worker 部署 BM25 各自一份** — 索引在 worker A 重建后 worker B 仍命中旧版（pickle 模式已减轻、但跨 worker 真正一致仍未做）。
+5. **🟡 BM25 多 worker 各自一份** — 文件锁 + atomic replace 防止 pickle 损坏，但跨 worker 内存索引仍各自重建（无 invalidate 广播）；建议单 worker 部署，多 worker 走相同存储 + 30s 内最终一致。
 6. **🟡 Handoff 是"黑洞"** — 转接成功但客服侧无通知 / 无队列 / 无超时兜底。
-7. **🟢 旧 chunk 缺 `source / indexed_at_epoch`** — 启用任意过滤即被排除；正式启用前需安排一次全量 reindex。
-8. **🟢 远程 `feat/be-core` 分支可清理**（user-active 校验已在 master）。
+7. **🟡 WS `_cancel_flags` 进程内字典** — 不同 worker 上的连接互相看不到 cancel；多 worker 部署前需迁移到 Redis。
+8. **🟢 旧 chunk 缺 `source / indexed_at_epoch`** — 启用任意过滤即被排除；正式启用前需安排一次全量 reindex。
+9. **🟢 `filters.tags` 静默丢弃** — 入参传 `tags` 不会报错，只 WARN 日志；调用方需自检。
 
 ## 6. Outstanding Work — 14 Trellis Tasks
 
@@ -110,7 +126,7 @@
 
 ### Wave 节奏
 
-- **Wave 1**（已立，本任务）：流程梳理三件套（任务导入 + AGENTS.md 拆分 + STATUS 合并）
+- **Wave 1**（已完成 2026-05-19）：流程梳理三件套（任务导入 + AGENTS.md 拆分 + STATUS 合并）+ 一致性硬约束（ticket DB 去重 / BM25 snapshot / route-map epoch / 4 个回归用例）
 - **Wave 2**：Handoff + SLA + out_of_scope（运营痛点最强，~8 人日）
 - **Wave 3**：Prompt 模板 + Async 索引 + KB 回流（产品故事收口，~12-15 人日）
 - **Wave 4**：合规 + 前端测试 + 多 worker + 3 份 runbook（~10-15 人日）
@@ -124,8 +140,9 @@
   - `STATUS_CHECK_2026-05-14.md` — 2026-05-14 readonly audit（lint / 改动文件矩阵 / 命令验证）
   - `UNIMPLEMENTED_2026-05-14.md` — 2026-05-16 末次进度的未实现清单（已被 §6 替代）
   - `TODO_TASKS_5_6.md` — Task 5/6 详细方案（多数已完成）
-- 评审：[`docs/audits/CLOSURE_SOP_REVIEW_2026-05-16.md`](../audits/CLOSURE_SOP_REVIEW_2026-05-16.md)
+- 评审：[`docs/audits/CLOSURE_SOP_REVIEW_2026-05-16.md`](../audits/CLOSURE_SOP_REVIEW_2026-05-16.md) / [`docs/audits/IMPLICIT_CONSTRAINTS_AUDIT_2026-05-19.md`](../audits/IMPLICIT_CONSTRAINTS_AUDIT_2026-05-19.md)
 - 业务契约：[`AGENTS.md`](../../AGENTS.md)
+- Claude Code 工程指南：[`CLAUDE.md`](../../CLAUDE.md)
 - Trellis 工程流程：[`TRELLIS.md`](../../TRELLIS.md)
 
 ## 8. Maintenance Notes

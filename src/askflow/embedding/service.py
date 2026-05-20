@@ -41,8 +41,9 @@ class EmbeddingService:
     ) -> int:
         """重建单个文档的可检索表示，并返回写入的分块数量。
 
-        每个分块会带上 `doc_id / title / source / indexed_at_epoch`，
-        后续 RAG 检索的元数据过滤依赖这些字段。
+        每个分块会带上 `doc_id / title / source / indexed_at_epoch / generation`，
+        后续 RAG 检索的元数据过滤依赖前四个字段，`generation` 用来在 add-then-swap-then-delete
+        模式里区分新旧两代分块——值是写入瞬间的毫秒时间戳，单文档内单调递增。
         """
         logger.info("indexing_document", doc_id=doc_id, file_path=file_path)
         text = parse_file(file_path, content_bytes)
@@ -52,27 +53,39 @@ class EmbeddingService:
             return 0
 
         embeddings = await self._embedder.embed(chunks)
-        ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
-        indexed_at_epoch = int(datetime.now(timezone.utc).timestamp())
+        # generation 用毫秒时间戳保证单调；indexed_at_epoch 仍是秒，对外接口语义不变。
+        generation = int(datetime.now(timezone.utc).timestamp() * 1000)
+        indexed_at_epoch = generation // 1000
+        new_ids = [f"{doc_id}_g{generation}_c{i}" for i in range(len(chunks))]
         base_meta: dict = {
             "doc_id": doc_id,
             "title": title,
             "indexed_at_epoch": indexed_at_epoch,
+            "generation": generation,
         }
         if source:
             base_meta["source"] = source
         metadatas = [{**base_meta, "chunk_index": i} for i in range(len(chunks))]
-        # 只有在解析和向量化都成功后，才替换旧分块，避免索引被半途清空。
-        self._vector_store.delete_by_doc_id(doc_id)
+
+        # 步骤 1：先写入新分块。失败 → 老分块仍在原位，调用方重试不会丢数据。
         self._vector_store.add(
-            ids=ids,
+            ids=new_ids,
             embeddings=embeddings,
             documents=chunks,
             metadatas=metadatas,
         )
-        # 向量库写完再同步 BM25——失败也只是 BM25 漏当前文档，下次 reindex/重启会补回。
+        # 步骤 2：再删旧分块（显式保留刚写入的 new_ids）。失败 → 双版本短暂共存，
+        # 下次 reindex 会用更新的 generation 再次清扫；检索结果可能短暂重复但不会消失。
+        deleted = self._vector_store.delete_doc_chunks_except(doc_id, new_ids)
+        # 步骤 3：BM25 以向量库最终态为准刷新；失败也只影响一次刷新窗口，下次写入兜回。
         self._refresh_bm25_index()
-        logger.info("document_indexed", doc_id=doc_id, chunk_count=len(chunks))
+        logger.info(
+            "document_indexed",
+            doc_id=doc_id,
+            chunk_count=len(chunks),
+            replaced_old=deleted,
+            generation=generation,
+        )
         return len(chunks)
 
     async def delete_document(self, doc_id: str) -> None:
