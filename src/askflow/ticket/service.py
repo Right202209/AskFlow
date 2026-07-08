@@ -59,7 +59,49 @@ class TicketService:
     async def list_user_tickets(
         self, user_id: uuid.UUID, limit: int = 20, offset: int = 0
     ):
-        return await self._repo.list_by_user(user_id, limit, offset)
+        return await self._repo.list_by_user(user_id, limit=limit, offset=offset)
+
+    async def list_tickets_for_actor(
+        self,
+        actor: User,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        status: str | None = None,
+        priority: str | None = None,
+        assignee: str | None = None,
+        query: str | None = None,
+    ) -> tuple[list, int]:
+        if self._is_staff(actor):
+            tickets = await self._repo.list_for_staff(
+                limit=limit,
+                offset=offset,
+                status=status,
+                priority=priority,
+                assignee=assignee,
+                query=query,
+            )
+            total = await self._repo.count_for_staff(
+                status=status,
+                priority=priority,
+                assignee=assignee,
+                query=query,
+            )
+            return tickets, total
+
+        tickets = await self._repo.list_by_user(
+            actor.id,
+            limit=limit,
+            offset=offset,
+            status=status,
+            query=query,
+        )
+        total = await self._repo.count_by_user(
+            actor.id,
+            status=status,
+            query=query,
+        )
+        return tickets, total
 
     async def update_status(self, ticket_id: uuid.UUID, status: str):
         ticket_status = TicketStatus(status)

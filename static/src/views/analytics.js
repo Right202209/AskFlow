@@ -121,7 +121,7 @@ function renderAnalyticsSummary() {
     const recentConversations = state.conversations.slice(0, 4);
     const filteredTicketCount = getFilteredTickets().length;
     const summaryCards = [
-        ["本地缓存会话", state.conversations.length, "基于浏览器本地索引恢复"],
+        ["已恢复会话", state.conversations.length, "优先基于服务端列表恢复最近会话"],
         ["当前激活会话", activeConversationCount, state.conversationId ? state.conversationId.slice(0, 8) : "当前未选择会话"],
         ["已加载工单", state.tickets.length, "当前前端已获取到的工单记录"],
         ["筛选后工单", filteredTicketCount, "按当前搜索条件命中的工单数"],

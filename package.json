@@ -7,7 +7,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --minify --format=esm --target=es2020 --entry-names=[name]",
+    "build:watch": "esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 --entry-names=[name] --watch"
   },
   "repository": {
     "type": "git",

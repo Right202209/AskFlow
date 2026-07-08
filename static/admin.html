@@ -125,7 +125,7 @@
                             </div>
                             <button class="secondary-btn small" id="newConversationBtn" type="button">新建会话</button>
                         </div>
-                        <p class="panel-note">当前列表基于本地索引和历史会话 ID 恢复，适合运营视角下的最近访问工作区。</p>
+                        <p class="panel-note">当前列表与摘要优先从服务端恢复，本地缓存仅用于辅助保留最近访问状态。</p>
                         <div class="toolbar-row stacked-mobile">
                             <input type="text" id="conversationSearch" placeholder="搜索会话标题、摘要或 ID">
                             <label class="checkbox-row compact-checkbox">
@@ -134,6 +134,10 @@
                             </label>
                         </div>
                         <div class="conversation-list" id="conversationList"></div>
+                        <div class="toolbar-row ticket-list-footer">
+                            <span class="subtle-text">默认显示最近 20 条会话。</span>
+                            <button class="ghost-btn small hidden" id="loadMoreConversationsBtn" type="button">再加载 20 条</button>
+                        </div>
                     </section>
 
                     <section class="panel chat-panel">
@@ -205,7 +209,7 @@
                         </div>
                         <p class="panel-note" id="ticketListHint">当前接口返回当前登录用户的工单列表。</p>
                         <div class="toolbar-row stacked-mobile">
-                            <input type="text" id="ticketSearch" placeholder="搜索工单标题、描述或 ID">
+                            <input type="text" id="ticketSearch" placeholder="搜索工单标题、描述、会话或 ID">
                             <select id="ticketStatusFilter">
                                 <option value="">全部状态</option>
                                 <option value="pending">pending</option>
@@ -213,6 +217,14 @@
                                 <option value="resolved">resolved</option>
                                 <option value="closed">closed</option>
                             </select>
+                            <select id="ticketQueuePriorityFilter">
+                                <option value="">全部优先级</option>
+                                <option value="low">low</option>
+                                <option value="medium">medium</option>
+                                <option value="high">high</option>
+                                <option value="urgent">urgent</option>
+                            </select>
+                            <input type="text" id="ticketQueueAssigneeFilter" placeholder="按处理人筛选，例如 agent-01">
                         </div>
                         <div class="card-list" id="ticketList"></div>
                         <div class="toolbar-row ticket-list-footer">
@@ -465,8 +477,6 @@
         </main>
     </div>
 
-    <script type="module">
-        import("/static/dist/workspace-main.js").catch(() => import("/static/src/workspace-main.js"));
-    </script>
+    <script type="module" src="/static/dist/workspace-main.js"></script>
 </body>
 </html>

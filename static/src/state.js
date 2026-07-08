@@ -35,6 +35,10 @@ export const state = {
     ticketPageSize: 20,
     ticketPageIncrement: 20,
     ticketReachedEnd: false,
+    ticketFilterTimer: null,
+    conversationPageSize: 20,
+    conversationPageIncrement: 20,
+    conversationReachedEnd: false,
     conversationId: null,
     conversations: [],
     messages: [],
@@ -86,7 +90,7 @@ export function loadStoredConversations() {
     if (!raw) return [];
     try {
         const list = JSON.parse(raw);
-        return Array.isArray(list) ? list.sort(sortByUpdatedAt) : [];
+        return Array.isArray(list) ? list.map(sanitizeStoredConversation).sort(sortByUpdatedAt) : [];
     } catch (error) {
         localStorage.removeItem(conversationStorageKey());
         return [];
@@ -95,7 +99,20 @@ export function loadStoredConversations() {
 
 export function saveStoredConversations() {
     if (!state.user?.userId) return;
-    localStorage.setItem(conversationStorageKey(), JSON.stringify(state.conversations));
+    localStorage.setItem(
+        conversationStorageKey(),
+        JSON.stringify(state.conversations.map(sanitizeStoredConversation)),
+    );
+}
+
+function sanitizeStoredConversation(conversation) {
+    return {
+        id: conversation.id,
+        title: conversation.title || "未命名会话",
+        createdAt: conversation.createdAt || null,
+        updatedAt: conversation.updatedAt || null,
+        status: conversation.status || "active",
+    };
 }
 
 function conversationStorageKey() {

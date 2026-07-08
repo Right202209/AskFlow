@@ -25,6 +25,7 @@ export function initChat() {
         sendBtn: document.getElementById("sendBtn"),
         cancelBtn: document.getElementById("cancelBtn"),
         loadHistoryBtn: document.getElementById("loadHistoryBtn"),
+        loadMoreConversationsBtn: document.getElementById("loadMoreConversationsBtn"),
     });
 
     el.newConversationBtn.addEventListener("click", startNewConversation);
@@ -37,6 +38,7 @@ export function initChat() {
             pushToast("当前没有选中的会话。", "error");
         }
     });
+    el.loadMoreConversationsBtn?.addEventListener("click", handleLoadMoreConversations);
     el.messageInput.addEventListener("keydown", handleComposerKeydown);
     el.conversationList.addEventListener("click", handleConversationListClick);
     el.conversationSearch.addEventListener("input", handleConversationSearch);
@@ -48,8 +50,9 @@ export function initChat() {
     on("app:login", syncSendButtonState);
     on("app:logout", handleLogout);
     on("chat:openConversation", handleOpenConversation);
-    on("view:refresh", (view) => {
+    on("view:refresh", async (view) => {
         if (view !== "chat") return;
+        await refreshConversationList();
         if (state.conversationId) {
             loadConversationMessages(state.conversationId);
         } else {
@@ -62,7 +65,7 @@ export function initChat() {
 }
 
 async function handleBootstrap() {
-    renderConversationList();
+    await refreshConversationList(true);
     if (state.conversationId) {
         updateConversationHeader();
         await loadConversationMessages(state.conversationId);
@@ -71,6 +74,12 @@ async function handleBootstrap() {
 }
 
 function handleLogout() {
+    state.conversationSearch = "";
+    state.conversationOnlyActive = false;
+    state.conversationId = null;
+    state.conversations = [];
+    state.messages = [];
+    state.conversationReachedEnd = false;
     el.conversationSearch.value = "";
     el.conversationOnlyActive.checked = false;
     renderConversationList();
@@ -94,7 +103,7 @@ async function startNewConversation() {
             body: { title },
         });
         const conversation = mapConversation(data);
-        upsertConversation({ ...conversation, title, lastMessage: "" });
+        upsertConversation(conversation);
         state.conversationId = conversation.id;
         state.messages = [];
         persistSession();
@@ -120,9 +129,49 @@ function upsertConversation(conversation) {
     renderConversationList();
 }
 
+async function refreshConversationList(silent) {
+    return loadConversationPage({ reset: true, silent });
+}
+
+async function loadConversationPage({ reset = false, silent = false } = {}) {
+    if (!state.token) {
+        state.conversations = [];
+        state.conversationReachedEnd = false;
+        renderConversationList();
+        return;
+    }
+
+    const limit = reset
+        ? Math.max(state.conversationPageSize, state.conversations.length || 0)
+        : state.conversationPageSize;
+    const offset = reset ? 0 : state.conversations.length;
+
+    try {
+        const data = await apiRequest(`/api/v1/chat/conversations?limit=${limit}&offset=${offset}`);
+        const conversations = data.map((item) => mapConversation(item));
+        state.conversations = reset
+            ? conversations
+            : [...state.conversations, ...conversations.filter((item) => !state.conversations.some((current) => current.id === item.id))];
+        state.conversations.sort(sortByUpdatedAt);
+        state.conversationReachedEnd = conversations.length < limit;
+        saveStoredConversations();
+        renderConversationList();
+        if (!silent) {
+            setStatus(reset ? "会话列表已刷新。" : "已加载更多会话。");
+        }
+    } catch (error) {
+        renderConversationList();
+        if (!silent) {
+            pushToast(error.message, "error");
+            setStatus(`加载会话列表失败: ${error.message}`);
+        }
+    }
+}
+
 function renderConversationList() {
     if (!state.conversations.length) {
         el.conversationList.innerHTML = emptyState("暂无会话，点击\"新建会话\"或直接发送消息创建。");
+        el.loadMoreConversationsBtn?.classList.add("hidden");
         emit("analytics:updateSummary");
         return;
     }
@@ -130,6 +179,7 @@ function renderConversationList() {
     const conversations = getFilteredConversations();
     if (!conversations.length) {
         el.conversationList.innerHTML = emptyState("没有匹配的会话。");
+        el.loadMoreConversationsBtn?.classList.add("hidden");
         return;
     }
 
@@ -146,14 +196,11 @@ function renderConversationList() {
                         <span>${escapeHtml((c.id || "").slice(0, 8))}</span>
                     </div>
                 </button>
-                <div class="conversation-actions">
-                    <button class="icon-btn" data-action="rename-conversation" data-conversation-id="${escapeHtml(c.id)}" type="button">改名</button>
-                    <button class="icon-btn" data-action="remove-conversation" data-conversation-id="${escapeHtml(c.id)}" type="button">移除</button>
-                </div>
             </article>
         `)
         .join("");
 
+    el.loadMoreConversationsBtn?.classList.toggle("hidden", state.conversationReachedEnd || !state.token || Boolean(state.conversationSearch.trim()) || state.conversationOnlyActive);
     emit("analytics:updateSummary");
 }
 
@@ -190,6 +237,7 @@ async function loadConversationMessages(conversationId) {
         renderMessages();
         updateConversationHeader();
         populateTicketDraft();
+        await refreshConversationList(true);
         setStatus("已加载会话历史。");
     } catch (error) {
         state.messages = [];
@@ -226,6 +274,15 @@ function removeConversation(conversationId) {
     renderConversationList();
 }
 
+async function handleLoadMoreConversations() {
+    if (!requireAuth()) return;
+    if (state.conversationReachedEnd) {
+        pushToast("当前没有更多会话。", "info");
+        return;
+    }
+    await loadConversationPage();
+}
+
 async function handleConversationListClick(event) {
     const action = event.target.dataset.action;
     const conversationId = event.target.dataset.conversationId;
@@ -233,24 +290,6 @@ async function handleConversationListClick(event) {
 
     if (action === "select-conversation") {
         await selectConversation(conversationId);
-        return;
-    }
-
-    if (action === "rename-conversation") {
-        const current = state.conversations.find((item) => item.id === conversationId);
-        const nextTitle = window.prompt("输入新的本地会话名称", current?.title || "");
-        if (nextTitle == null) return;
-        const trimmed = nextTitle.trim();
-        if (!trimmed) { pushToast("会话名称不能为空。", "error"); return; }
-        upsertConversation({ id: conversationId, title: trimmed, updatedAt: new Date().toISOString() });
-        if (state.conversationId === conversationId) updateConversationHeader();
-        pushToast("本地会话名称已更新。", "success");
-        return;
-    }
-
-    if (action === "remove-conversation") {
-        removeConversation(conversationId);
-        pushToast("会话已从本地列表移除。", "success");
     }
 }
 
@@ -489,6 +528,7 @@ function finalizeStream(inlineSources) {
         });
     }
 
+    refreshConversationList(true).catch(() => {});
     state.stream = null;
     state.pendingConversationTitle = "";
     syncSendButtonState();

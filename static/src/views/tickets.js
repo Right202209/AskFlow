@@ -1,5 +1,5 @@
 import { state } from "../state.js";
-import { apiRequest, requireAuth, isStaffRole, isAdminRole } from "../api.js";
+import { apiRequest, requireAuth, isStaffRole } from "../api.js";
 import { pushToast, setStatus } from "../toast.js";
 import { emit, on } from "../events.js";
 import { escapeHtml, cssEscape, emptyState, formatRelative, deriveConversationTitle } from "../dom.js";
@@ -17,6 +17,8 @@ export function initTickets() {
         ticketListHint: document.getElementById("ticketListHint"),
         ticketSearch: document.getElementById("ticketSearch"),
         ticketStatusFilter: document.getElementById("ticketStatusFilter"),
+        ticketQueuePriorityFilter: document.getElementById("ticketQueuePriorityFilter"),
+        ticketQueueAssigneeFilter: document.getElementById("ticketQueueAssigneeFilter"),
         ticketList: document.getElementById("ticketList"),
         ticketListMeta: document.getElementById("ticketListMeta"),
         ticketLoadMoreBtn: document.getElementById("ticketLoadMoreBtn"),
@@ -38,6 +40,8 @@ export function initTickets() {
     el.ticketDetailContainer.addEventListener("change", handleTicketDetailInput);
     el.ticketSearch.addEventListener("input", handleTicketFilterChange);
     el.ticketStatusFilter.addEventListener("change", handleTicketFilterChange);
+    el.ticketQueuePriorityFilter?.addEventListener("change", handleTicketFilterChange);
+    el.ticketQueueAssigneeFilter?.addEventListener("input", handleTicketFilterChange);
 
     on("tickets:refresh", (silent) => refreshTickets(silent));
     on("tickets:fetchDetail", (ticketId) => {
@@ -69,8 +73,13 @@ function renderEmptyStates() {
 }
 
 function handleLogout() {
+    clearTicketFilterTimer();
+    state.ticketSearch = "";
+    state.ticketStatusFilter = "";
     el.ticketSearch.value = "";
     el.ticketStatusFilter.value = "";
+    if (el.ticketQueuePriorityFilter) el.ticketQueuePriorityFilter.value = "";
+    if (el.ticketQueueAssigneeFilter) el.ticketQueueAssigneeFilter.value = "";
     renderEmptyStates();
     resetTicketDetail();
 }
@@ -78,7 +87,7 @@ function handleLogout() {
 function updateRoleUI() {
     const canAccessStaffViews = isStaffRole();
     el.ticketListHint.textContent = canAccessStaffViews
-        ? "列表接口当前只返回当前登录用户的工单；可在下方通过工单 ID 查看并处理指定工单。"
+        ? "当前支持按状态、优先级、处理人与关键词筛选全部工单。"
         : "当前接口返回当前登录用户的工单列表；你只能关闭自己的工单。";
 }
 
@@ -126,9 +135,19 @@ async function refreshTickets(silent) {
     }
 
     try {
-        const data = await apiRequest(`/api/v1/tickets?limit=${state.ticketPageSize}&offset=0`);
-        state.tickets = Array.isArray(data) ? data : [];
-        state.ticketReachedEnd = state.tickets.length < state.ticketPageSize;
+        const params = new URLSearchParams({
+            limit: String(state.ticketPageSize),
+            offset: "0",
+        });
+        if (state.ticketStatusFilter) params.set("status", state.ticketStatusFilter);
+        if (isStaffRole() && el.ticketQueuePriorityFilter?.value) params.set("priority", el.ticketQueuePriorityFilter.value);
+        if (isStaffRole() && el.ticketQueueAssigneeFilter?.value.trim()) params.set("assignee", el.ticketQueueAssigneeFilter.value.trim());
+        if (state.ticketSearch) params.set("query", state.ticketSearch);
+
+        const response = await apiRequest(`/api/v1/tickets?${params.toString()}`, { rawResponse: true });
+        state.tickets = Array.isArray(response?.data) ? response.data : [];
+        state.ticketReachedEnd = state.tickets.length >= Number(response?.total || 0)
+            || state.tickets.length < state.ticketPageSize;
         renderTicketList();
         if (!silent) setStatus("工单列表已刷新。");
     } catch (error) {
@@ -178,24 +197,48 @@ function renderTicketList() {
 }
 
 function getFilteredTickets() {
-    const keyword = state.ticketSearch.trim().toLowerCase();
-    return state.tickets.filter((ticket) => {
-        if (state.ticketStatusFilter && ticket.status !== state.ticketStatusFilter) return false;
-        if (!keyword) return true;
-        return [ticket.title, ticket.description, ticket.id, ticket.conversation_id]
-            .filter(Boolean).join(" ").toLowerCase().includes(keyword);
-    });
+    return state.tickets;
 }
 
-function handleTicketFilterChange() {
+function handleTicketFilterChange(event) {
     state.ticketSearch = el.ticketSearch.value.trim();
     state.ticketStatusFilter = el.ticketStatusFilter.value;
-    renderTicketList();
+
+    const applyFilters = () => {
+        refreshTickets(true).catch((error) => {
+            pushToast(error.message, "error");
+            setStatus(`工单筛选失败: ${error.message}`);
+        });
+    };
+
+    if (event?.type === "input") {
+        clearTicketFilterTimer();
+        state.ticketFilterTimer = window.setTimeout(() => {
+            state.ticketFilterTimer = null;
+            applyFilters();
+        }, 300);
+        return;
+    }
+
+    clearTicketFilterTimer();
+    applyFilters();
+}
+
+function clearTicketFilterTimer() {
+    if (state.ticketFilterTimer) {
+        window.clearTimeout(state.ticketFilterTimer);
+        state.ticketFilterTimer = null;
+    }
 }
 
 function updateTicketListMeta() {
     const visibleCount = getFilteredTickets().length;
-    const filtered = Boolean(state.ticketSearch || state.ticketStatusFilter);
+    const filtered = Boolean(
+        state.ticketSearch
+        || state.ticketStatusFilter
+        || (isStaffRole() && el.ticketQueuePriorityFilter?.value)
+        || (isStaffRole() && el.ticketQueueAssigneeFilter?.value.trim())
+    );
 
     if (!state.tickets.length) {
         el.ticketListMeta.textContent = "当前没有已加载工单。";

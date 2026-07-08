@@ -1,7 +1,7 @@
 .PHONY: dev test seed migrate lint clean docker-up docker-down create-user build-ui watch-ui
 
 dev:
-	uvicorn askflow.main:create_app --factory --reload --host 0.0.0.0 --port 8000
+	@trap 'kill 0' EXIT INT TERM; npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]' --watch & uvicorn askflow.main:create_app --factory --reload --host 0.0.0.0 --port 8000
 
 docker-up:
 	docker compose up -d
@@ -40,7 +40,9 @@ install:
 	pip install -e ".[dev]"
 
 build-ui:
-	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]'
+	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --minify --format=esm --target=es2020 '--entry-names=[name]'
+	@test -f static/dist/portal-main.js
+	@test -f static/dist/workspace-main.js
 
 watch-ui:
 	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]' --watch

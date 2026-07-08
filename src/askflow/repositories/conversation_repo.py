@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.models.conversation import Conversation, ConversationStatus
+from askflow.models.message import Message
 
 
 class ConversationRepo:
@@ -24,15 +26,32 @@ class ConversationRepo:
     async def list_by_user(
         self, user_id: uuid.UUID, limit: int = 20, offset: int = 0
     ) -> list[Conversation]:
+        latest_message_preview = (
+            select(Message.content)
+            .where(Message.conversation_id == Conversation.id)
+            .order_by(Message.created_at.desc())
+            .limit(1)
+            .scalar_subquery()
+        )
         stmt = (
-            select(Conversation)
+            select(Conversation, latest_message_preview.label("last_message_preview"))
             .where(Conversation.user_id == user_id)
             .order_by(Conversation.updated_at.desc())
             .limit(limit)
             .offset(offset)
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        rows = result.all()
+        conversations: list[Conversation] = []
+        for conversation, last_message_preview in rows:
+            conversation.last_message_preview = last_message_preview[:80] if last_message_preview else None
+            conversations.append(conversation)
+        return conversations
+
+    async def touch(self, conversation: Conversation) -> Conversation:
+        conversation.updated_at = datetime.now(timezone.utc)
+        await self._db.flush()
+        return conversation
 
     async def update_status(
         self, conv_id: uuid.UUID, status: ConversationStatus
@@ -40,5 +59,5 @@ class ConversationRepo:
         conv = await self.get_by_id(conv_id)
         if conv:
             conv.status = status
-            await self._db.flush()
+            await self.touch(conv)
         return conv

@@ -36,6 +36,10 @@ export async function apiRequest(path, options = {}) {
         throw new Error(payload.error || "请求失败");
     }
 
+    if (options.rawResponse) {
+        return payload;
+    }
+
     if (payload && Object.prototype.hasOwnProperty.call(payload, "data")) {
         return payload.data;
     }

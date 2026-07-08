@@ -99,6 +99,7 @@ export function mapConversation(item) {
         createdAt: item.created_at,
         updatedAt: item.updated_at,
         status: item.status,
+        lastMessage: item.last_message_preview || "",
     };
 }
 

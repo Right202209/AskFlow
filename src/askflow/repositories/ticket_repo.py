@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.models.ticket import Ticket, TicketPriority, TicketStatus
@@ -40,17 +40,80 @@ class TicketRepo:
         return await self._db.get(Ticket, ticket_id)
 
     async def list_by_user(
-        self, user_id: uuid.UUID, limit: int = 20, offset: int = 0
+        self,
+        user_id: uuid.UUID,
+        limit: int = 20,
+        offset: int = 0,
+        status: str | None = None,
+        query: str | None = None,
     ) -> list[Ticket]:
-        stmt = (
-            select(Ticket)
-            .where(Ticket.user_id == user_id)
-            .order_by(Ticket.created_at.desc())
-            .limit(limit)
-            .offset(offset)
+        stmt = self._build_filtered_query(
+            user_id=user_id,
+            status=status,
+            priority=None,
+            assignee=None,
+            query=query,
         )
+        stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit).offset(offset)
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_by_user(
+        self,
+        user_id: uuid.UUID,
+        status: str | None = None,
+        query: str | None = None,
+    ) -> int:
+        stmt = self._build_filtered_query(
+            user_id=user_id,
+            status=status,
+            priority=None,
+            assignee=None,
+            query=query,
+            count_only=True,
+        )
+        result = await self._db.execute(stmt)
+        return result.scalar_one()
+
+    async def list_for_staff(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        status: str | None = None,
+        priority: str | None = None,
+        assignee: str | None = None,
+        query: str | None = None,
+    ) -> list[Ticket]:
+        stmt = self._build_filtered_query(
+            user_id=None,
+            status=status,
+            priority=priority,
+            assignee=assignee,
+            query=query,
+        )
+        stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit).offset(offset)
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_for_staff(
+        self,
+        *,
+        status: str | None = None,
+        priority: str | None = None,
+        assignee: str | None = None,
+        query: str | None = None,
+    ) -> int:
+        stmt = self._build_filtered_query(
+            user_id=None,
+            status=status,
+            priority=priority,
+            assignee=assignee,
+            query=query,
+            count_only=True,
+        )
+        result = await self._db.execute(stmt)
+        return result.scalar_one()
 
     async def update_status(
         self, ticket_id: uuid.UUID, status: TicketStatus
@@ -115,3 +178,37 @@ class TicketRepo:
         stmt = select(Ticket.status, func.count()).group_by(Ticket.status)
         result = await self._db.execute(stmt)
         return {row[0].value: row[1] for row in result.all()}
+
+    def _build_filtered_query(
+        self,
+        *,
+        user_id: uuid.UUID | None,
+        status: str | None,
+        priority: str | None,
+        assignee: str | None,
+        query: str | None,
+        count_only: bool = False,
+    ):
+        stmt = select(func.count()).select_from(Ticket) if count_only else select(Ticket)
+
+        if user_id is not None:
+            stmt = stmt.where(Ticket.user_id == user_id)
+        if status:
+            stmt = stmt.where(Ticket.status == TicketStatus(status))
+        if priority:
+            stmt = stmt.where(Ticket.priority == TicketPriority(priority))
+        if assignee:
+            stmt = stmt.where(Ticket.assignee == assignee)
+        if query:
+            pattern = f"%{query}%"
+            stmt = stmt.where(
+                or_(
+                    Ticket.title.ilike(pattern),
+                    Ticket.description.ilike(pattern),
+                    func.cast(Ticket.id, String).ilike(pattern),
+                    func.cast(Ticket.conversation_id, String).ilike(pattern),
+                    Ticket.assignee.ilike(pattern),
+                )
+            )
+
+        return stmt

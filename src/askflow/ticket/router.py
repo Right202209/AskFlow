@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.core.auth import get_current_user
 from askflow.core.database import get_db
 from askflow.core.exceptions import NotFoundError
+from askflow.models.ticket import TicketPriority, TicketStatus
 from askflow.models.user import User
 from askflow.repositories.conversation_repo import ConversationRepo
 from askflow.repositories.ticket_repo import TicketRepo
@@ -98,16 +99,28 @@ async def update_ticket(
 
 @router.get("", response_model=PaginatedResponse[TicketResponse])
 async def list_tickets(
-    limit: int = 20,
-    offset: int = 0,
+    limit: int = Query(20, gt=0, le=100),
+    offset: int = Query(0, ge=0),
+    status: TicketStatus | None = None,
+    priority: TicketPriority | None = None,
+    assignee: str | None = None,
+    query: str | None = None,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     service = _get_service(db)
-    tickets = await service.list_user_tickets(user.id, limit, offset)
+    tickets, total = await service.list_tickets_for_actor(
+        user,
+        limit=limit,
+        offset=offset,
+        status=status,
+        priority=priority,
+        assignee=assignee,
+        query=query,
+    )
     return PaginatedResponse(
         data=[TicketResponse.model_validate(t) for t in tickets],
-        total=len(tickets),
+        total=total,
         page=offset // limit + 1,
         limit=limit,
     )

@@ -1,3 +1,12 @@
+FROM node:22-slim AS frontend-build
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY static/src/ static/src/
+RUN npm run build
+
 FROM python:3.11-slim AS base
 
 WORKDIR /app
@@ -12,7 +21,9 @@ RUN pip install --no-cache-dir .
 FROM base AS runtime
 
 COPY src/ src/
-COPY static/ static/
+COPY static/*.html static/
+COPY static/style.css static/
+COPY --from=frontend-build /app/static/dist/ static/dist/
 COPY alembic/ alembic/
 COPY alembic.ini .
 

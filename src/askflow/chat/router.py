@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.agent.service import get_agent_service
@@ -29,6 +29,27 @@ router = APIRouter()
 _cancel_flags: dict[str, bool] = {}
 
 
+def _resolve_last_message_preview(conversation) -> str | None:
+    preview = getattr(conversation, "last_message_preview", None)
+    if preview is not None:
+        return preview
+    messages = getattr(conversation, "messages", None) or []
+    if not messages:
+        return None
+    return getattr(messages[-1], "content", None)
+
+
+def _to_conversation_response(conversation) -> ConversationResponse:
+    return ConversationResponse(
+        id=conversation.id,
+        status=(conversation.status.value if hasattr(conversation.status, "value") else conversation.status),
+        title=conversation.title,
+        last_message_preview=_resolve_last_message_preview(conversation),
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
+    )
+
+
 @router.post("/conversations", response_model=APIResponse[ConversationResponse])
 async def create_conversation(
     body: ConversationCreate,
@@ -37,7 +58,19 @@ async def create_conversation(
 ):
     repo = ConversationRepo(db)
     conv = await repo.create(user_id=user.id, title=body.title)
-    return APIResponse(data=ConversationResponse.model_validate(conv))
+    return APIResponse(data=_to_conversation_response(conv))
+
+
+@router.get("/conversations", response_model=APIResponse[list[ConversationResponse]])
+async def list_conversations(
+    limit: int = Query(20, gt=0, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    repo = ConversationRepo(db)
+    conversations = await repo.list_by_user(user.id, limit=limit, offset=offset)
+    return APIResponse(data=[_to_conversation_response(item) for item in conversations])
 
 
 @router.get(
@@ -195,6 +228,7 @@ async def websocket_endpoint(ws: WebSocket, token: str):
                         confidence=intent_result.confidence if intent_result else None,
                         sources={"sources": sources} if sources else None,
                     )
+                    await conv_repo.touch(conv)
                     await db.commit()
 
                     if sources:

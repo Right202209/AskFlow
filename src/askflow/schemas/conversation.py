@@ -12,9 +12,9 @@ class ConversationCreate(BaseModel):
 
 class ConversationResponse(BaseModel):
     id: uuid.UUID
-    user_id: uuid.UUID
     status: str
     title: str | None
+    last_message_preview: str | None = None
     created_at: datetime
     updated_at: datetime
 
