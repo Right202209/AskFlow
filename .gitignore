@@ -19,3 +19,4 @@ CLAUDE.md
 web/tsconfig.tsbuildinfo
 web/dist/
 static/dist/
+data/
