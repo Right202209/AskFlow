@@ -1,5 +1,3 @@
-import pytest
-
 from askflow.embedding.chunker import chunk_text
 
 

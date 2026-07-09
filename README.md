@@ -1,377 +1,241 @@
 # AskFlow
 
-Intelligent customer service system powered by RAG (Retrieval-Augmented Generation) and Agent architecture.
+[中文](README_zh.md)
 
-AskFlow connects private knowledge bases, intent recognition, workflow routing, and ticket management into an automated loop — reducing repetitive manual work while keeping private knowledge secure and under control.
+> Positioning: AskFlow is a single-tenant, self-hosted reference implementation of RAG + Agent + Ticket for internal customer-support teams. It is **not** a multi-tenant SaaS — no tenant isolation, billing, SLA, or audit logging is implemented.
+
+AskFlow is an intelligent customer support system built around FastAPI, RAG, and an intent-routing agent layer. This repository contains both the backend application under `src/askflow/` and the React frontend under `web/`.
+
+## Current Snapshot
+
+- Backend: FastAPI app with domain modules for chat, RAG, agent routing, tickets, embeddings, and admin APIs
+- Frontend: React 19 + Vite app for login/register, chat, tickets, dashboard, document management, and intent management
+- Infrastructure: Docker Compose stack for PostgreSQL, Redis, ChromaDB, and MinIO
+- Documentation: project docs in `docs/`, frontend-specific notes in `web/docs/`
+
+Project status and gaps are tracked in [docs/status/PROJECT_STATUS.md](docs/status/PROJECT_STATUS.md).
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   Clients (Web Chat UI)                  │
-└──────────────────────────┬──────────────────────────────┘
-                           │ WebSocket / HTTPS
-┌──────────────────────────▼──────────────────────────────┐
-│                    FastAPI Gateway                        │
-│          Auth (JWT) · Rate Limiting · CORS · Trace       │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────┐
-│                       Services                           │
-│                                                          │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐        │
-│  │   Chat     │  │    RAG     │  │   Agent    │        │
-│  │  WebSocket │  │  Retrieval │  │  Intent &  │        │
-│  │  Streaming │  │  & LLM    │  │  Routing   │        │
-│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘        │
-│        │               │               │                │
-│  ┌─────┴──────┐  ┌─────┴──────┐  ┌─────┴──────┐        │
-│  │  Ticket    │  │ Embedding  │  │   Admin    │        │
-│  │  Service   │  │  Service   │  │  Service   │        │
-│  └────────────┘  └────────────┘  └────────────┘        │
-└──────────────────────────┬──────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────┐
-│                     Data Layer                           │
-│    PostgreSQL · Redis · ChromaDB · MinIO                 │
-└─────────────────────────────────────────────────────────┘
+React Web UI
+    |
+    | HTTPS / WebSocket
+    v
+FastAPI API
+    |
+    +-- chat
+    +-- rag
+    +-- agent
+    +-- tickets
+    +-- embedding
+    +-- admin
+    |
+    +-- PostgreSQL
+    +-- Redis
+    +-- ChromaDB
+    +-- MinIO
 ```
 
-## Features
+## Implemented Capabilities
 
-- **RAG Pipeline** — Hybrid retrieval (BM25 + vector search) with Reciprocal Rank Fusion, optional cross-encoder reranking, and LLM-generated answers with source citations
-- **Agent System** — Rule + LLM dual intent classification, config-driven routing to RAG / ticket / handoff / clarification
-- **Streaming Chat** — WebSocket-based real-time token streaming with heartbeat, cancel, and auto-reconnect
-- **Ticket Management** — Automated ticket creation with 24-hour dedup, status tracking, and real-time WebSocket notifications
-- **Configurable Embedding** — Protocol-based design supporting local (fastembed, CPU ONNX) and API (OpenAI-compatible) providers
-- **Document Processing** — PDF, DOCX, Markdown, HTML parsing with configurable chunking
-- **Graceful Degradation** — LLM down: return raw chunks; vector DB down: fallback to BM25; agent error: fallback to RAG
-- **Observability** — Structured JSON logs with trace_id, Prometheus metrics (request count/latency, RAG queries, LLM tokens, intent distribution)
-- **Admin Panel** — Document/intent/prompt management, analytics dashboard
-- **Auth & Security** — JWT authentication, RBAC (user/agent/admin), Redis sliding-window rate limiting (60 req/min)
+- JWT authentication and role-aware backend/frontend access control
+- WebSocket chat with streaming tokens, ping/pong heartbeat, cancel, and reconnect handling
+- Hybrid retrieval with BM25 plus Chroma vector search
+- Intent classification and route execution for `rag`, `ticket`, `handoff`, `tool`, and `clarify`
+- Ticket creation, updates, user-scoped listing, and admin/agent views
+- Document upload, indexing, reindexing, deletion, and MinIO-backed storage
+- Admin analytics, document management, and intent configuration endpoints
+- `/health` and `/metrics` endpoints for operational visibility
 
-## Tech Stack
+## Current Gaps
 
-| Component | Technology |
-|-----------|-----------|
-| Backend Framework | FastAPI (async) |
-| Database | PostgreSQL 16 + SQLAlchemy 2.0 (async) |
-| Vector Database | ChromaDB |
-| Cache | Redis 7 |
-| Object Storage | MinIO (S3-compatible) |
-| LLM | OpenAI-compatible API (Ollama, vLLM, etc.) |
-| Embedding | fastembed (local, CPU ONNX) / OpenAI-compatible API |
-| Search | BM25 (rank_bm25 + jieba) + vector search |
-| Auth | JWT (PyJWT) + bcrypt |
-| Logging | structlog (JSON) |
-| Metrics | prometheus-client |
-| Migrations | Alembic |
-| Chat UI | Vanilla HTML / JS / CSS (esbuild bundled) |
+- Prompt template CRUD and versioning are not implemented yet
+- Retrieval metadata filtering by source/time/tag is not implemented
+- `order_query` ships with a pluggable webhook adapter; see [Plugging a real order service](#plugging-a-real-order-service)
+- No user-management API exists yet
+- Integration, E2E, and frontend automated tests are still missing
 
-## Project Structure
+## Repository Layout
 
-```
-AskFlow/
-├── pyproject.toml              # Dependencies & build config
-├── docker-compose.yml          # PostgreSQL, Redis, ChromaDB, MinIO
-├── Dockerfile
-├── Makefile                    # Dev commands
-├── package.json                # Frontend tooling (esbuild)
-├── alembic.ini
-├── .env.example
-├── alembic/                    # Database migrations
-│   ├── env.py
-│   └── versions/
-├── static/                     # Admin Console (vanilla JS, modular ES modules)
-│   ├── index.html              # SPA shell with sidebar nav
-│   ├── style.css
-│   ├── src/                    # Source modules (dev: loaded directly; prod: esbuild bundle)
-│   │   ├── main.js             # Entry point, initializes all modules
-│   │   ├── state.js            # Centralized state + localStorage persistence
-│   │   ├── router.js           # SPA view switching with role guards
-│   │   ├── auth.js             # Login/register, JWT management
-│   │   ├── api.js              # REST API wrapper
-│   │   ├── ws.js               # WebSocket client (auto-reconnect, heartbeat)
-│   │   ├── toast.js            # Toast notifications + status bar
-│   │   ├── dom.js              # DOM utilities
-│   │   ├── events.js           # Pub/sub event bus
-│   │   └── views/              # One module per page
-│   │       ├── chat.js         # Conversation list + streaming chat
-│   │       ├── tickets.js      # Ticket CRUD + search/filter
-│   │       ├── documents.js    # Document upload + reindex (admin)
-│   │       ├── intents.js      # Intent config editor (admin)
-│   │       ├── analytics.js    # Metrics dashboard (admin)
-│   │       └── tools.js        # RAG & intent debug forms
-│   └── dist/                   # esbuild output (gitignored)
-├── scripts/
-│   ├── seed_data.py            # Initial data seeding
-│   └── create_user.py          # User creation utility
-├── tests/
-│   ├── conftest.py
-│   ├── unit/                   # Unit tests
-│   ├── integration/
-│   └── e2e/
-└── src/askflow/
-    ├── main.py                 # App factory + lifespan
-    ├── config.py               # Pydantic Settings
-    ├── dependencies.py         # DI providers
-    ├── core/                   # Shared infrastructure
-    │   ├── database.py         # SQLAlchemy async engine + session
-    │   ├── redis.py            # Redis client pool
-    │   ├── minio_client.py     # MinIO wrapper
-    │   ├── security.py         # JWT + password hashing
-    │   ├── auth.py             # get_current_user, require_role
-    │   ├── rate_limiter.py     # Redis sliding window
-    │   ├── logging.py          # structlog JSON + trace_id
-    │   ├── trace.py            # contextvars trace_id
-    │   ├── exceptions.py       # Custom exceptions + handlers
-    │   ├── middleware.py       # CORS, trace, logging
-    │   └── metrics.py          # Prometheus counters/histograms
-    ├── models/                 # SQLAlchemy ORM models
-    │   ├── base.py             # Base, UUID mixin, Timestamp mixin
-    │   ├── user.py
-    │   ├── conversation.py
-    │   ├── message.py
-    │   ├── ticket.py
-    │   ├── document.py
-    │   └── intent_config.py
-    ├── schemas/                # Pydantic request/response schemas
-    │   ├── common.py           # APIResponse, PaginatedResponse
-    │   ├── auth.py
-    │   ├── conversation.py
-    │   ├── message.py
-    │   ├── ticket.py
-    │   ├── document.py
-    │   ├── intent.py
-    │   └── admin.py
-    ├── repositories/           # Data access layer
-    │   ├── user_repo.py
-    │   ├── conversation_repo.py
-    │   ├── message_repo.py
-    │   ├── ticket_repo.py
-    │   ├── document_repo.py
-    │   └── intent_config_repo.py
-    ├── chat/                   # WebSocket + session management
-    │   ├── protocol.py         # Message types & serialization
-    │   ├── manager.py          # Connection manager
-    │   ├── session.py          # Redis-backed session store
-    │   └── router.py           # WS endpoint + REST endpoints
-    ├── rag/                    # Retrieval-Augmented Generation
-    │   ├── llm_client.py       # OpenAI-compatible streaming client
-    │   ├── vector_store.py     # ChromaDB wrapper
-    │   ├── bm25.py             # BM25 index (jieba tokenization)
-    │   ├── retriever.py        # Hybrid retriever + RRF fusion
-    │   ├── reranker.py         # Optional cross-encoder reranker
-    │   ├── prompt_builder.py   # System prompt + context template
-    │   ├── service.py          # RAG query orchestration
-    │   └── router.py
-    ├── agent/                  # Intent classification + routing
-    │   ├── intent_classifier.py # Rule + LLM dual classification
-    │   ├── state.py            # Agent state dataclass
-    │   ├── graph.py            # Agent graph (classify → route)
-    │   ├── nodes.py            # RAG, ticket, handoff, clarify nodes
-    │   ├── tools.py            # Business tools (order search, etc.)
-    │   ├── service.py          # Agent orchestration service
-    │   └── router.py
-    ├── ticket/                 # Ticket lifecycle
-    │   ├── service.py          # CRUD + status transitions
-    │   ├── dedup.py            # 24h deduplication
-    │   ├── notifier.py         # WebSocket notifications
-    │   └── router.py
-    ├── embedding/              # Document processing + vectorization
-    │   ├── embedder.py         # Embedder protocol + implementations
-    │   ├── parser.py           # PDF, DOCX, HTML, MD parsers
-    │   ├── chunker.py          # Text chunking with overlap
-    │   ├── service.py          # Index orchestration
-    │   ├── router.py
-    │   └── index_worker.py
-    └── admin/                  # Management + analytics
-        ├── service.py          # Document/intent management
-        ├── analytics.py        # Aggregated statistics
-        └── router.py           # Auth + admin endpoints
-```
+| Path | Purpose |
+|------|---------|
+| `src/askflow/` | Backend source code |
+| `web/src/` | React frontend source code |
+| `alembic/` | Database migrations |
+| `tests/` | Backend test suite |
+| `scripts/` | Seed and local helper scripts |
+| `docs/` | Project docs, status, and audits |
+| `web/docs/` | Frontend planning and implementation notes |
+
+For a fuller directory map, see [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md).
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
-- Docker & Docker Compose
-- An OpenAI-compatible LLM (e.g., Ollama with `qwen2.5:7b`)
+- Node.js 20+
+- Docker with Compose support
+- An OpenAI-compatible LLM endpoint for chat and, optionally, embeddings
 
-### 1. Clone & Configure
-
-```bash
-git clone <repo-url> AskFlow
-cd AskFlow
-cp .env.example .env
-# Edit .env to configure LLM endpoint, secret key, etc.
-```
-
-### 2. Start Infrastructure
-
-```bash
-make docker-up
-# Starts PostgreSQL, Redis, ChromaDB, MinIO
-```
-
-### 3. Install Dependencies
+### 1. Create a Virtual Environment
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-make install
 ```
 
-### 4. Run Migrations & Seed Data
+### 2. Install Dependencies
+
+```bash
+make install
+make install-web
+```
+
+### 3. Configure the Environment
+
+```bash
+cp .env.example .env
+```
+
+`.env.example` contains the full set of application defaults. The main values you will usually adjust are:
+
+- `DATABASE_URL`
+- `REDIS_URL`
+- `CHROMA_HOST` / `CHROMA_PORT`
+- `MINIO_*`
+- `LLM_*`
+- `EMBEDDING_*`
+- `CORS_ORIGINS`
+
+### 4. Start Local Infrastructure
+
+```bash
+make docker-up
+```
+
+This starts:
+
+- PostgreSQL on `localhost:5432`
+- Redis on `localhost:6379`
+- ChromaDB on `localhost:8100`
+- MinIO API on `localhost:9000`
+- MinIO console on `localhost:9001`
+
+### 5. Apply Migrations and Seed Data
 
 ```bash
 make migrate
 make seed
-# Creates admin user (admin / admin123) and default intent configs
 ```
 
-### 5. Start the Server
+Seed data creates:
+
+- `admin / admin123`
+- `user1 / user123`
+
+### 6. Run the Backend
 
 ```bash
 make dev
-# Server runs at http://localhost:8000
 ```
 
-### 6. Open Chat UI
+Backend URLs:
 
-Visit `http://localhost:8000/static/index.html`, log in with `admin / admin123`, and start chatting.
+- API: `http://localhost:8000`
+- OpenAPI docs: `http://localhost:8000/docs`
+- Health: `http://localhost:8000/health`
+- Metrics: `http://localhost:8000/metrics`
 
-## API Endpoints
-
-### Authentication
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/admin/auth/register` | Register new user |
-| POST | `/api/v1/admin/auth/login` | Login, get JWT token |
-
-### Chat
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/chat/conversations` | Create conversation |
-| GET | `/api/v1/chat/conversations/{id}/messages` | Get message history |
-| WS | `/api/v1/chat/ws/{token}` | WebSocket chat endpoint |
-
-### RAG
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/rag/query` | Query knowledge base |
-
-### Agent
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/agent/classify` | Classify intent |
-
-### Tickets
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/tickets` | Create ticket |
-| GET | `/api/v1/tickets/{id}` | Get ticket |
-| PUT | `/api/v1/tickets/{id}` | Update ticket |
-| GET | `/api/v1/tickets` | List user tickets |
-
-### Embedding
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/v1/embedding/documents` | Upload & index document |
-| POST | `/api/v1/embedding/documents/{id}/reindex` | Reindex document |
-
-### Admin
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/v1/admin/documents` | List documents |
-| DELETE | `/api/v1/admin/documents/{id}` | Delete document |
-| GET | `/api/v1/admin/intents` | List intent configs |
-| POST | `/api/v1/admin/intents` | Create intent config |
-| PUT | `/api/v1/admin/intents/{id}` | Update intent config |
-| GET | `/api/v1/admin/analytics` | Analytics dashboard |
-
-### Observability
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics |
-
-## WebSocket Protocol
-
-**Client -> Server:**
-
-```json
-{
-  "type": "message | cancel | ping",
-  "conversation_id": "uuid",
-  "content": "user input text",
-  "timestamp": 1710000000
-}
-```
-
-**Server -> Client:**
-
-```json
-{
-  "type": "token | message_end | error | intent | source | ticket | pong",
-  "conversation_id": "uuid",
-  "data": {
-    "content": "streaming token or full message",
-    "sources": [{"title": "...", "chunk": "...", "score": 0.92}],
-    "label": "faq",
-    "confidence": 0.95,
-    "ticket_id": "uuid"
-  },
-  "timestamp": 1710000000
-}
-```
-
-## Degradation Strategy
-
-| Scenario | Fallback |
-|----------|----------|
-| LLM unavailable | Return raw retrieved chunks with note |
-| Vector DB unavailable | Fallback to BM25 keyword search |
-| Agent routing error | Default to RAG pipeline |
-| WebSocket disconnect | Client auto-reconnect, server restores session |
-
-## Development
+### 7. Run the Frontend
 
 ```bash
-make dev         # Start dev server with hot reload
-make test        # Run tests with coverage
-make lint        # Run ruff linter
-make format      # Auto-format code
-make clean       # Clean build artifacts
-make docker-up   # Start infrastructure
-make docker-down # Stop infrastructure
-make seed        # Seed initial data
-make migrate     # Run database migrations
-make build-ui    # Bundle frontend (esbuild)
-make watch-ui    # Bundle frontend with file watcher
-make create-user # Create user via CLI
+make dev-web
 ```
 
-## Environment Variables
+Frontend URL:
 
-See [.env.example](.env.example) for all configurable options:
+- App: `http://localhost:5173`
 
-- `LLM_BASE_URL` / `LLM_MODEL` — LLM endpoint configuration
-- `EMBEDDING_PROVIDER` — `api` (OpenAI-compatible, default) or `local` (fastembed, CPU ONNX)
-- `DATABASE_URL` — PostgreSQL connection string
-- `REDIS_URL` — Redis connection string
-- `CHROMA_HOST` / `CHROMA_PORT` — ChromaDB connection
-- `SECRET_KEY` — JWT signing key (change in production!)
-- `RATE_LIMIT_PER_MINUTE` — Per-user rate limit (default: 60)
+## Common Commands
+
+| Command | Description |
+|---------|-------------|
+| `make install` | Install backend dependencies in editable mode |
+| `make install-web` | Install frontend dependencies |
+| `make docker-up` | Start PostgreSQL, Redis, ChromaDB, and MinIO |
+| `make docker-down` | Stop local infrastructure |
+| `make migrate` | Apply Alembic migrations |
+| `make migrate-create msg="..."` | Create a new migration |
+| `make seed` | Seed default users and intents |
+| `make dev` | Start the FastAPI dev server |
+| `make dev-web` | Start the Vite dev server |
+| `make test` | Run backend tests |
+| `make lint` | Run Ruff checks |
+| `make format` | Format backend code with Ruff |
+| `make build-web` | Build the frontend for production |
+
+## API Surface
+
+The backend mounts these route groups:
+
+| Area | Prefix |
+|------|--------|
+| RAG | `/api/v1/rag` |
+| Embedding | `/api/v1/embedding` |
+| Chat | `/api/v1/chat` |
+| Agent | `/api/v1/agent` |
+| Tickets | `/api/v1/tickets` |
+| Admin | `/api/v1/admin` |
+
+Representative endpoints:
+
+- `POST /api/v1/admin/auth/login`
+- `GET /api/v1/chat/conversations`
+- `WS /api/v1/chat/ws/{token}`
+- `POST /api/v1/rag/query`
+- `POST /api/v1/tickets`
+- `GET /api/v1/admin/analytics`
+- `POST /api/v1/embedding/documents`
+
+Use `/docs` for the complete schema.
+
+## Verification Notes
+
+- `npm run build` in `web/` passes as of 2026-04-06
+- `make test` assumes project dependencies are available on your shell `PATH`; activate `.venv` or install the project first with `make install`
+
+## Plugging a real order service
+
+`agent.tools.search_order` ships as a pluggable webhook adapter. When
+`ORDER_LOOKUP_WEBHOOK_URL` is unset, it falls back to a mocked response
+(`data_source: "mock"`) so the demo flow still works end-to-end. Once
+configured, it forwards the order id as a query parameter and returns
+the upstream JSON verbatim (`data_source: "webhook"`); on timeout / 4xx /
+5xx it falls back to mock and increments
+`askflow_order_webhook_failures_total{reason="..."}`.
+
+Minimum integration steps:
+
+1. Stand up a tiny HTTP service that returns the order JSON. A working
+   reference lives at [`docs/examples/order_webhook_demo.py`](docs/examples/order_webhook_demo.py)
+   (a 30-line FastAPI app that reads `docs/examples/orders.csv`).
+2. Set the environment variables, then restart the AskFlow backend:
+   - `ORDER_LOOKUP_WEBHOOK_URL=http://localhost:9100/lookup`
+   - Optional: `ORDER_LOOKUP_TIMEOUT_S=5.0`
+   - Optional: `ORDER_LOOKUP_AUTH_HEADER="Bearer <token>"`
+3. In the chat UI, ask "查我的订单 AB12345678" — the agent will extract
+   the order id (regex `\b[A-Z]{2,4}\d{6,}\b`) and call your webhook.
+
+## Documentation
+
+- [docs/README.md](docs/README.md) - project documentation index
+- [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) - repository layout and file placement rules
+- [docs/status/PROJECT_STATUS.md](docs/status/PROJECT_STATUS.md) - current implementation status
+- [docs/audits/PRD_AUDIT.md](docs/audits/PRD_AUDIT.md) - PRD-to-code audit
+- [web/docs/README.md](web/docs/README.md) - frontend documentation index
+- [PRD.md](PRD.md) - product requirements document
 
 ## License
 

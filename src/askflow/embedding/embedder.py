@@ -30,11 +30,13 @@ class LocalEmbedder:
     def _load_model(self):
         if self._model is None:
             from fastembed import TextEmbedding
+
             self._model = TextEmbedding(model_name=settings.embedding_model)
         return self._model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         import asyncio
+
         model = self._load_model()
         embeddings = await asyncio.get_event_loop().run_in_executor(
             None, lambda: list(model.embed(texts))
@@ -120,7 +122,9 @@ class APIEmbedder:
             return [embedding for _, embedding in sorted(normalized, key=lambda x: x[0])]
         except (KeyError, TypeError, ValueError) as error:
             logger.error("embedding_api_invalid_payload", response=data)
-            raise EmbeddingProviderError("Embedding API response has invalid embedding payload") from error
+            raise EmbeddingProviderError(
+                "Embedding API response has invalid embedding payload"
+            ) from error
 
     @property
     def dimension(self) -> int:

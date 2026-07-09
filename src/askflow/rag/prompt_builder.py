@@ -25,23 +25,26 @@ def build_rag_prompt(
     conversation_history: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     chunks = "\n\n---\n\n".join(
-        f"[Source: {r.metadata.get('title', 'Unknown')}]\n{r.document}"
-        for r in results
+        f"[Source: {r.metadata.get('title', 'Unknown')}]\n{r.document}" for r in results
     )
     messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     if conversation_history:
         messages.extend(conversation_history[-6:])
-    messages.append({
-        "role": "user",
-        "content": CONTEXT_TEMPLATE.format(chunks=chunks, question=question),
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": CONTEXT_TEMPLATE.format(chunks=chunks, question=question),
+        }
+    )
     return messages
 
 
 def build_fallback_response(results: list[RetrievalResult]) -> str:
     if not results:
         return "Sorry, I couldn't find relevant information. Please try rephrasing your question or contact a human agent."
-    parts = ["AI generation is temporarily unavailable. Here are the most relevant knowledge base excerpts:\n"]
+    parts = [
+        "AI generation is temporarily unavailable. Here are the most relevant knowledge base excerpts:\n"
+    ]
     for i, r in enumerate(results[:3], 1):
         title = r.metadata.get("title", "Unknown")
         parts.append(f"**{i}. [{title}]**\n{r.document[:300]}...\n")

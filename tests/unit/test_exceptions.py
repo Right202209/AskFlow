@@ -1,5 +1,3 @@
-import pytest
-
 from askflow.core.exceptions import (
     AskFlowError,
     ForbiddenError,

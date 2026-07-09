@@ -5,18 +5,21 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from askflow.admin.analytics import get_analytics
+from askflow.admin.analytics import get_analytics, get_ticket_dashboard
 from askflow.admin.service import AdminService
 from askflow.core.auth import get_current_user, require_role
 from askflow.core.database import get_db
 from askflow.core.security import create_access_token, hash_password, verify_password
 from askflow.models.user import User, UserRole
 from askflow.repositories.user_repo import UserRepo
-from askflow.schemas.admin import AnalyticsResponse
+from askflow.schemas.admin import AnalyticsResponse, TicketDashboardResponse
 from askflow.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from askflow.schemas.common import APIResponse
+from askflow.schemas.common import APIResponse, PaginatedResponse
 from askflow.schemas.document import DocumentResponse
 from askflow.schemas.intent import IntentConfigCreate, IntentConfigResponse, IntentConfigUpdate
+from askflow.schemas.ticket import TicketResponse
+from askflow.models.ticket import TicketStatus
+from askflow.repositories.ticket_repo import TicketRepo
 
 router = APIRouter()
 
@@ -45,6 +48,13 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     return APIResponse(data=TokenResponse(access_token=token))
 
 
+@router.get("/auth/me", response_model=APIResponse[UserResponse])
+async def get_current_user_info(
+    user: User = Depends(get_current_user),
+):
+    return APIResponse(data=UserResponse.model_validate(user))
+
+
 @router.get("/documents", response_model=APIResponse[list[DocumentResponse]])
 async def list_documents(
     status: str | None = None,
@@ -69,6 +79,7 @@ async def delete_document(
     from askflow.embedding.embedder import create_embedder
     from askflow.embedding.service import EmbeddingService
     from askflow.rag.vector_store import get_vector_store
+
     embed_service = EmbeddingService(create_embedder(), get_vector_store())
     await embed_service.delete_document(str(doc_id))
     return APIResponse(data={"deleted": True})
@@ -103,12 +114,43 @@ async def update_intent(
     user: User = Depends(require_role(UserRole.admin)),
 ):
     service = AdminService(db)
-    config = await service.update_intent_config(
-        config_id, **body.model_dump(exclude_unset=True)
-    )
+    config = await service.update_intent_config(config_id, **body.model_dump(exclude_unset=True))
     if not config:
         return APIResponse(success=False, error="Intent config not found")
     return APIResponse(data=IntentConfigResponse.model_validate(config))
+
+
+@router.delete("/intents/{config_id}", response_model=APIResponse)
+async def delete_intent(
+    config_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin)),
+):
+    service = AdminService(db)
+    deleted = await service.delete_intent_config(config_id)
+    if not deleted:
+        return APIResponse(success=False, error="Intent config not found")
+    return APIResponse(data={"deleted": True})
+
+
+@router.get("/tickets", response_model=PaginatedResponse[TicketResponse])
+async def list_all_tickets(
+    status: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+):
+    ticket_status = TicketStatus(status) if status else None
+    repo = TicketRepo(db)
+    tickets = await repo.list_all(limit=limit, offset=offset, status=ticket_status)
+    total = await repo.count_all(status=ticket_status)
+    return PaginatedResponse(
+        data=[TicketResponse.model_validate(t) for t in tickets],
+        total=total,
+        page=offset // limit + 1,
+        limit=limit,
+    )
 
 
 @router.get("/analytics", response_model=APIResponse[AnalyticsResponse])
@@ -117,4 +159,14 @@ async def analytics(
     user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
 ):
     data = await get_analytics(db)
+    return APIResponse(data=data)
+
+
+@router.get("/tickets/dashboard", response_model=APIResponse[TicketDashboardResponse])
+async def ticket_dashboard(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+):
+    """工单系统级看板:open 总数、SLA 超时、按优先级与最近 7 天进出趋势。"""
+    data = await get_ticket_dashboard(db)
     return APIResponse(data=data)

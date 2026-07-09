@@ -17,7 +17,8 @@ class ConnectionManager:
         self._user_connections: dict[str, set[str]] = defaultdict(set)
 
     async def connect(self, ws: WebSocket, connection_id: str, user_id: str) -> None:
-        await ws.accept()
+        # 调用方负责完成 ws.accept()；新版 /ws 流程在等到 auth 帧前就 accept，
+        # 所以这里不再做隐式 accept。
         self._connections[connection_id] = ws
         self._user_connections[user_id].add(connection_id)
         WS_CONNECTIONS.inc()
@@ -26,6 +27,7 @@ class ConnectionManager:
     def disconnect(self, connection_id: str, user_id: str) -> None:
         self._connections.pop(connection_id, None)
         self._user_connections.get(user_id, set()).discard(connection_id)
+        WS_CONNECTIONS.dec()
         logger.info("ws_disconnected", connection_id=connection_id)
 
     async def send(self, connection_id: str, message: ServerMessage) -> None:
@@ -37,9 +39,7 @@ class ConnectionManager:
         for conn_id in self._user_connections.get(user_id, set()):
             await self.send(conn_id, message)
 
-    async def broadcast_token(
-        self, connection_id: str, conversation_id: str, token: str
-    ) -> None:
+    async def broadcast_token(self, connection_id: str, conversation_id: str, token: str) -> None:
         await self.send(
             connection_id,
             ServerMessage(
@@ -50,14 +50,23 @@ class ConnectionManager:
         )
 
     async def send_message_end(
-        self, connection_id: str, conversation_id: str, sources: list[dict] | None = None
+        self,
+        connection_id: str,
+        conversation_id: str,
+        sources: list[dict] | None = None,
+        message_id: str | None = None,
     ) -> None:
+        # message_id 透传给前端，让 👍/👎 按钮能拿到目标消息的 UUID 去调
+        # POST /api/v1/chat/messages/{id}/feedback。
+        payload: dict = {"sources": sources or []}
+        if message_id:
+            payload["message_id"] = message_id
         await self.send(
             connection_id,
             ServerMessage(
                 type=ServerMessageType.message_end,
                 conversation_id=conversation_id,
-                data={"sources": sources or []},
+                data=payload,
             ),
         )
 

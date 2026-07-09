@@ -51,6 +51,30 @@ class VectorStore:
     def delete_by_doc_id(self, doc_id: str) -> None:
         self._collection.delete(where={"doc_id": doc_id})
 
+    def delete_doc_chunks_except(self, doc_id: str, keep_ids: list[str]) -> int:
+        """删除该 doc_id 名下除 keep_ids 之外的所有分块，返回实际删除条数。
+
+        index_document 走 "add 新 → 删旧" 顺序时用它清扫上一代分块——`$ne` 在 Chroma
+        对老 chunk（缺 generation 字段）行为不稳定，所以这里改为先查 doc_id 命中的所有 IDs，
+        再用显式 ID 列表 delete，对历史脏数据也有效。
+        """
+        result = self._collection.get(where={"doc_id": doc_id}, include=[])
+        all_ids = list(result.get("ids") or [])
+        keep = set(keep_ids)
+        to_delete = [i for i in all_ids if i not in keep]
+        if to_delete:
+            self._collection.delete(ids=to_delete)
+        return len(to_delete)
+
+    def get_all_chunks(self) -> dict:
+        """全量取回 collection 内的 chunk 文本与元数据——BM25 索引冷启动时使用。"""
+        result = self._collection.get(include=["documents", "metadatas"])
+        return {
+            "ids": result.get("ids") or [],
+            "documents": result.get("documents") or [],
+            "metadatas": result.get("metadatas") or [],
+        }
+
     @property
     def count(self) -> int:
         return self._collection.count()

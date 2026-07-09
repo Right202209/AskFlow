@@ -1,70 +1,129 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
-from inspect import signature
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-import uuid
 
 import pytest
 
-from askflow.chat.router import list_conversations
+from askflow.chat.router import (
+    archive_conversation,
+    delete_conversation,
+    rename_conversation,
+)
+from askflow.core.exceptions import NotFoundError
+from askflow.models.conversation import ConversationStatus
+from askflow.schemas.conversation import ConversationRename
 
 
-class _RepoFactory:
-    def __init__(self, repo):
-        self.repo = repo
-
-    def __call__(self, db):
-        return self.repo
-
-
-@pytest.mark.asyncio
-async def test_list_conversations_returns_current_users_history(mock_user):
-    first = SimpleNamespace(
-        id=uuid.uuid4(),
-        user_id=mock_user.id,
-        status="active",
-        title="Second",
-        last_message_preview="Second latest message",
-        created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
-        updated_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
-        messages=[SimpleNamespace(content="Second latest message")],
+def make_conversation(user_id: uuid.UUID, **overrides):
+    now = datetime.now(timezone.utc)
+    return SimpleNamespace(
+        id=overrides.get("id", uuid.uuid4()),
+        user_id=user_id,
+        status=overrides.get("status", ConversationStatus.active),
+        title=overrides.get("title", "Current title"),
+        created_at=overrides.get("created_at", now),
+        updated_at=overrides.get("updated_at", now),
     )
-    second = SimpleNamespace(
-        id=uuid.uuid4(),
-        user_id=mock_user.id,
-        status="active",
-        title="First",
-        created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
-        updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
-        messages=[],
-    )
+
+
+async def test_rename_conversation_updates_title(monkeypatch, mock_user, mock_db):
+    conversation = make_conversation(mock_user.id, title="Updated title")
     repo = MagicMock()
-    repo.list_by_user = AsyncMock(return_value=[first, second])
-    db = AsyncMock()
+    repo.get_by_id_for_user = AsyncMock(return_value=conversation)
+    repo.update_title = AsyncMock(return_value=conversation)
 
-    import askflow.chat.router as chat_router
+    monkeypatch.setattr("askflow.chat.router.ConversationRepo", lambda db: repo)
 
-    original_repo = chat_router.ConversationRepo
-    chat_router.ConversationRepo = _RepoFactory(repo)
-    try:
-        response = await list_conversations(limit=20, offset=0, db=db, user=mock_user)
-    finally:
-        chat_router.ConversationRepo = original_repo
+    response = await rename_conversation(
+        conversation.id,
+        ConversationRename(title="Updated title"),
+        db=mock_db,
+        user=mock_user,
+    )
 
-    assert response.success is True
-    assert [item.id for item in response.data] == [first.id, second.id]
-    assert response.data[0].title == "Second"
-    assert response.data[0].last_message_preview == "Second latest message"
-    assert response.data[1].title == "First"
-    assert response.data[1].last_message_preview is None
-    repo.list_by_user.assert_awaited_once_with(mock_user.id, limit=20, offset=0)
+    repo.update_title.assert_awaited_once_with(conversation.id, "Updated title")
+    mock_db.commit.assert_awaited_once()
+    assert response.data.title == "Updated title"
 
 
-def test_list_conversations_constrains_pagination_query_params():
-    params = signature(list_conversations).parameters
+async def test_archive_conversation_sets_closed_status(monkeypatch, mock_user, mock_db):
+    conversation = make_conversation(mock_user.id, status=ConversationStatus.closed)
+    repo = MagicMock()
+    repo.get_by_id_for_user = AsyncMock(return_value=conversation)
+    repo.update_status = AsyncMock(return_value=conversation)
 
-    assert params["limit"].default.gt == 0
-    assert params["limit"].default.le == 100
-    assert params["offset"].default.ge == 0
+    monkeypatch.setattr("askflow.chat.router.ConversationRepo", lambda db: repo)
+
+    response = await archive_conversation(
+        conversation.id,
+        db=mock_db,
+        user=mock_user,
+    )
+
+    repo.update_status.assert_awaited_once_with(conversation.id, ConversationStatus.closed)
+    mock_db.commit.assert_awaited_once()
+    assert response.data.status == ConversationStatus.closed
+
+
+async def test_delete_conversation_clears_session_history(monkeypatch, mock_user, mock_db):
+    conversation = make_conversation(mock_user.id)
+    repo = MagicMock()
+    repo.get_by_id_for_user = AsyncMock(return_value=conversation)
+    repo.delete = AsyncMock(return_value=True)
+    clear = AsyncMock()
+
+    monkeypatch.setattr("askflow.chat.router.ConversationRepo", lambda db: repo)
+    monkeypatch.setattr("askflow.chat.router.session_store", SimpleNamespace(clear=clear))
+
+    response = await delete_conversation(
+        conversation.id,
+        db=mock_db,
+        user=mock_user,
+    )
+
+    repo.delete.assert_awaited_once_with(conversation.id)
+    mock_db.commit.assert_awaited_once()
+    clear.assert_awaited_once_with(str(conversation.id))
+    assert response.data.deleted is True
+
+
+async def test_delete_conversation_rolls_back_when_session_clear_fails(
+    monkeypatch, mock_user, mock_db
+):
+    conversation = make_conversation(mock_user.id)
+    repo = MagicMock()
+    repo.get_by_id_for_user = AsyncMock(return_value=conversation)
+    repo.delete = AsyncMock(return_value=True)
+    clear = AsyncMock(side_effect=RuntimeError("redis unavailable"))
+
+    monkeypatch.setattr("askflow.chat.router.ConversationRepo", lambda db: repo)
+    monkeypatch.setattr("askflow.chat.router.session_store", SimpleNamespace(clear=clear))
+
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        await delete_conversation(
+            conversation.id,
+            db=mock_db,
+            user=mock_user,
+        )
+
+    repo.delete.assert_awaited_once_with(conversation.id)
+    clear.assert_awaited_once_with(str(conversation.id))
+    mock_db.commit.assert_not_awaited()
+    mock_db.rollback.assert_awaited_once()
+
+
+async def test_delete_conversation_rejects_unknown_owner(monkeypatch, mock_user, mock_db):
+    repo = MagicMock()
+    repo.get_by_id_for_user = AsyncMock(return_value=None)
+    repo.delete = AsyncMock()
+
+    monkeypatch.setattr("askflow.chat.router.ConversationRepo", lambda db: repo)
+
+    with pytest.raises(NotFoundError):
+        await delete_conversation(uuid.uuid4(), db=mock_db, user=mock_user)
+
+    repo.delete.assert_not_awaited()
+    mock_db.commit.assert_not_awaited()

@@ -109,15 +109,8 @@ async def list_tickets(
     user: User = Depends(get_current_user),
 ):
     service = _get_service(db)
-    tickets, total = await service.list_tickets_for_actor(
-        user,
-        limit=limit,
-        offset=offset,
-        status=status,
-        priority=priority,
-        assignee=assignee,
-        query=query,
-    )
+    tickets = await service.list_user_tickets(user.id, limit, offset)
+    total = await service.count_user_tickets(user.id)
     return PaginatedResponse(
         data=[TicketResponse.model_validate(t) for t in tickets],
         total=total,

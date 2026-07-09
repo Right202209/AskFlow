@@ -6,7 +6,8 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "AskFlow"
-    app_env: str = "development"
+    # 默认 production：本地开发必须显式 APP_ENV=development，避免运维忘记配置时仍带默认弱密钥跑起来。
+    app_env: str = "production"
     debug: bool = False
     secret_key: str = "change-me-to-a-random-secret-key"
 
@@ -41,12 +42,27 @@ class Settings(BaseSettings):
     embedding_api_key: str = "ollama"
     embedding_dimension: int = 384
 
+    # BM25 持久化路径——lifespan 启动时从此文件 reload；写文档后会重新落盘。
+    bm25_index_path: str = "data/bm25_index.pkl"
+
+    # 订单查询 webhook——未配置时 search_order 走 mock 行为。
+    order_lookup_webhook_url: str | None = None
+    order_lookup_timeout_s: float = 5.0
+    # 透传给 webhook 的鉴权头（完整字符串，如 "Bearer xxx"）。
+    order_lookup_auth_header: str | None = None
+
     # Auth
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
 
     # Rate Limiting
     rate_limit_per_minute: int = 60
+
+    # Ticket SLA——pending/processing 工单超过该时长记为 SLA 超时,运营 dashboard 据此告警。
+    ticket_sla_hours: int = 24
+
+    # CORS
+    cors_origins: list[str] = ["http://localhost:5173"]
 
 
 settings = Settings()

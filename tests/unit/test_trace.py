@@ -1,5 +1,3 @@
-import pytest
-
 from askflow.core.trace import generate_trace_id, get_trace_id, trace_id_var
 
 

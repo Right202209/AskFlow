@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 
 from askflow.core.logging import get_logger
 from askflow.core.redis import redis_client
@@ -18,9 +17,7 @@ class SessionStore:
         raw = await pool.lrange(key, 0, MAX_HISTORY - 1)
         return [json.loads(item) for item in raw]
 
-    async def add_message(
-        self, conversation_id: str, role: str, content: str
-    ) -> None:
+    async def add_message(self, conversation_id: str, role: str, content: str) -> None:
         pool = redis_client.pool
         key = f"chat:history:{conversation_id}"
         await pool.rpush(key, json.dumps({"role": role, "content": content}))

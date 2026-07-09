@@ -16,6 +16,10 @@ class AgentState:
     response_tokens: list[str] = field(default_factory=list)
     sources: list[dict] = field(default_factory=list)
     ticket_id: str | None = None
+    ticket_data: dict[str, Any] | None = None
+    tool_result: dict[str, Any] | None = None
     error: str | None = None
     should_handoff: bool = False
     needs_clarification: bool = False
+    route: str | None = None
+    harness_trace: dict[str, Any] = field(default_factory=dict)

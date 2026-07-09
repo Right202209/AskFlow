@@ -1,7 +1,15 @@
-.PHONY: dev test seed migrate lint clean docker-up docker-down create-user build-ui watch-ui
+.PHONY: dev test seed migrate lint clean docker-up docker-down create-user install-web dev-web build-web
+
+PYTHON ?= python
+PIP ?= pip
+
+ifneq ("$(wildcard .venv/bin/python)","")
+PYTHON := .venv/bin/python
+PIP := .venv/bin/pip
+endif
 
 dev:
-	@trap 'kill 0' EXIT INT TERM; npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]' --watch & uvicorn askflow.main:create_app --factory --reload --host 0.0.0.0 --port 8000
+	uvicorn askflow.main:create_app --factory --reload --host 0.0.0.0 --port 8000
 
 docker-up:
 	docker compose up -d
@@ -16,33 +24,34 @@ migrate-create:
 	alembic revision --autogenerate -m "$(msg)"
 
 seed:
-	python scripts/seed_data.py
+	$(PYTHON) scripts/seed_data.py
 
 create-user:
-	python scripts/create_user.py --username $(username) --email $(email) --password $(password) --role $(role)
+	$(PYTHON) scripts/create_user.py --username $(username) --email $(email) --password $(password) --role $(role)
 
 test:
-	pytest tests/ -v --cov=src/askflow --cov-report=term-missing
+	$(PYTHON) -m pytest tests/ -v --cov=src/askflow --cov-report=term-missing
 
 lint:
-	ruff check src/ tests/
-	ruff format --check src/ tests/
+	$(PYTHON) -m ruff check src/ tests/
+	$(PYTHON) -m ruff format --check src/ tests/
 
 format:
-	ruff format src/ tests/
+	$(PYTHON) -m ruff format src/ tests/
 
 clean:
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	rm -rf .pytest_cache htmlcov .coverage dist build static/dist *.egg-info
+	rm -rf .pytest_cache htmlcov .coverage dist build *.egg-info
 
 install:
-	pip install -e ".[dev]"
+	$(PIP) install -e ".[dev]"
 
-build-ui:
-	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --minify --format=esm --target=es2020 '--entry-names=[name]'
-	@test -f static/dist/portal-main.js
-	@test -f static/dist/workspace-main.js
+install-web:
+	cd web && npm install
 
-watch-ui:
-	npx esbuild static/src/portal-main.js static/src/workspace-main.js --bundle --outdir=static/dist --sourcemap --format=esm --target=es2020 '--entry-names=[name]' --watch
+dev-web:
+	cd web && npm run dev
+
+build-web:
+	cd web && npm run build

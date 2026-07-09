@@ -68,6 +68,7 @@ async def upload_document(
             file_path=original_filename,
             content_bytes=content_bytes,
             title=title,
+            source=source,
         )
     except EmbeddingProviderError as error:
         logger.error("document_index_failed", doc_id=str(doc.id), error=str(error))
@@ -114,6 +115,7 @@ async def reindex_document(
             file_path=doc.file_path or storage_key,
             content_bytes=content_bytes,
             title=doc.title,
+            source=doc.source,
         )
     except EmbeddingProviderError as error:
         logger.error("document_reindex_failed", doc_id=str(doc.id), error=str(error))

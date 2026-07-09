@@ -2,9 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from askflow.schemas.common import APIResponse, PaginatedResponse
-from askflow.schemas.ticket import TicketCreate, TicketResponse, TicketUpdate
+from askflow.schemas.ticket import TicketCreate, TicketUpdate
 from askflow.schemas.auth import LoginRequest, RegisterRequest
-from askflow.schemas.conversation import ConversationCreate
 
 
 class TestAPIResponse:
