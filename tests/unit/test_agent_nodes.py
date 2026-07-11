@@ -10,6 +10,9 @@ import askflow.agent.tools as tools_module
 from askflow.agent.nodes import handoff_node, rag_node, ticket_node, tool_node
 from askflow.agent.state import AgentState
 from askflow.models.ticket import TicketPriority, TicketStatus
+from askflow.rag.grounding import assess_grounding
+from askflow.rag.retriever import RetrievalResult
+from askflow.rag.service import RAGStreamResult
 from askflow.schemas.intent import IntentResult
 
 
@@ -21,20 +24,28 @@ def make_stream(chunks):
     return _stream()
 
 
+def make_grounding(score: float = 0.8):
+    return assess_grounding(
+        [RetrievalResult(id="c0", document="doc", metadata={}, score=score, source="vector")]
+    )
+
+
 class TestAgentNodes:
     @pytest.mark.asyncio
     async def test_rag_node_collects_stream_tokens(self):
         state = AgentState(question="hello")
         rag_service = AsyncMock()
-        rag_service.query_stream.return_value = (
-            make_stream(["A", "B"]),
-            [{"title": "Guide", "score": 0.8}],
+        rag_service.query_stream.return_value = RAGStreamResult(
+            token_stream=make_stream(["A", "B"]),
+            sources=[{"title": "Guide", "score": 0.8}],
+            grounding=make_grounding(),
         )
 
         result = await rag_node(state, rag_service)
 
         assert result.response_tokens == ["A", "B"]
         assert result.sources == [{"title": "Guide", "score": 0.8}]
+        assert result.harness_trace["retrieval_confidence"] == 0.8
 
     @pytest.mark.asyncio
     async def test_ticket_node_creates_ticket_and_populates_state(self):

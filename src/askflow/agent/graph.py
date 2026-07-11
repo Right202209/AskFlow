@@ -33,6 +33,7 @@ class AgentGraph:
         *,
         ticket_service: TicketService | None = None,
         conversation_repo: ConversationRepo | None = None,
+        handoff_service=None,
         route_map: dict[str, str] | None = None,
     ) -> AgentState:
         """在需要时先分类，再根据路由结果执行对应节点。"""
@@ -62,9 +63,12 @@ class AgentGraph:
             else:
                 state.response_tokens = ["工单服务暂不可用，请联系人工客服。"]
         elif route == "handoff":
-            state = await handoff_node(state, conversation_repo)
+            state = await handoff_node(state, conversation_repo, handoff_service)
         elif route == "tool":
-            state = await tool_node(state, rag_service=self._rag_service)
+            # conversation_repo 用于槽位挂起记录的持久化（agent-real-handoff/01 修复的接线缺口）。
+            state = await tool_node(
+                state, rag_service=self._rag_service, conversation_repo=conversation_repo
+            )
         elif route == "clarify":
             state = await clarify_node(state)
 

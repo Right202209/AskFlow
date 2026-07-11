@@ -20,17 +20,18 @@ from askflow.core.auth import get_current_user
 from askflow.core.database import get_db
 from askflow.core.exceptions import NotFoundError
 from askflow.core.logging import get_logger
-from askflow.models.conversation import ConversationStatus
+from askflow.knowledge.gap_recorder import record_negative_feedback_gap
+from askflow.models.conversation import Conversation, ConversationStatus
 from askflow.models.user import User
 from askflow.repositories.conversation_repo import ConversationRepo
 from askflow.repositories.feedback_repo import FeedbackRepo
 from askflow.repositories.message_repo import MessageRepo
 from askflow.schemas.common import APIResponse
 from askflow.schemas.conversation import (
-    DeleteConversationResponse,
     ConversationCreate,
     ConversationRename,
     ConversationResponse,
+    DeleteConversationResponse,
 )
 from askflow.schemas.feedback import FeedbackCreate, FeedbackResponse
 from askflow.schemas.message import MessageResponse
@@ -42,7 +43,20 @@ router = APIRouter()
 # 握手后允许客户端发送 auth 帧的最长等待时间，避免恶意挂连接占用资源。
 AUTH_FRAME_TIMEOUT_SECONDS = 5
 
+# 已知缺口：进程本地、无同步——多 worker 部署需要共享的取消存储（见 CLAUDE.md）。
 _cancel_flags: dict[str, bool] = {}
+
+
+async def _get_user_conversation(
+    repo: ConversationRepo,
+    conversation_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Conversation:
+    """校验会话存在且属于当前用户，否则一律按 404 处理（不泄露他人会话的存在性）。"""
+    conversation = await repo.get_by_id(conversation_id)
+    if conversation is None or conversation.user_id != user_id:
+        raise NotFoundError("Conversation not found")
+    return conversation
 
 
 @router.post("/conversations", response_model=APIResponse[ConversationResponse])
@@ -53,28 +67,14 @@ async def create_conversation(
 ):
     repo = ConversationRepo(db)
     conv = await repo.create(user_id=user.id, title=body.title)
-    return APIResponse(data=_to_conversation_response(conv))
+    await db.commit()
+    return APIResponse(data=ConversationResponse.model_validate(conv))
 
 
 @router.get("/conversations", response_model=APIResponse[list[ConversationResponse]])
 async def list_conversations(
     limit: int = Query(20, gt=0, le=100),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    repo = ConversationRepo(db)
-    conversations = await repo.list_by_user(user.id, limit=limit, offset=offset)
-    return APIResponse(data=[_to_conversation_response(item) for item in conversations])
-
-
-@router.get(
-    "/conversations",
-    response_model=APIResponse[list[ConversationResponse]],
-)
-async def list_conversations(
-    limit: int = 20,
-    offset: int = 0,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -195,6 +195,8 @@ async def submit_feedback(
         rating=body.rating,
         comment=body.comment,
     )
+    # 差评转缺口信号（best-effort，共享本请求事务）：把被打分消息之前的用户提问记为缺口。
+    await record_negative_feedback_gap(db, message=message, rating=body.rating)
     await db.commit()
     return APIResponse(data=FeedbackResponse.model_validate(row))
 
@@ -221,7 +223,11 @@ async def _authenticate_token(token: str) -> uuid.UUID | None:
 
 
 async def _run_session(ws: WebSocket, user_id: uuid.UUID) -> None:
-    """认证后驱动连接的消息循环；调用方必须在此之前完成 ws.accept()。"""
+    """认证后驱动连接的消息循环；调用方必须在此之前完成 ws.accept()。
+
+    这里只做协议分发；message 帧的完整生命周期统一走
+    chat/service.py::process_user_message——REST 与 WS 的行为必须来自同一处实现。
+    """
     from pydantic import ValidationError
 
     connection_id = uuid.uuid4().hex
@@ -256,113 +262,7 @@ async def _run_session(ws: WebSocket, user_id: uuid.UUID) -> None:
 
             if msg.type == ClientMessageType.message:
                 _cancel_flags[connection_id] = False
-                conversation_id = msg.conversation_id or uuid.uuid4().hex
-
-                try:
-                    await check_rate_limit(str(user_id))
-                except Exception as e:
-                    await manager.send_error(connection_id, str(e))
-                    continue
-
-                async with async_session_factory() as db:
-                    conv_repo = ConversationRepo(db)
-                    msg_repo = MessageRepo(db)
-
-                    try:
-                        conv_uuid = uuid.UUID(conversation_id)
-                    except ValueError:
-                        conv = await conv_repo.create(user_id=user_id)
-                        conv_uuid = conv.id
-                    else:
-                        conv = await conv_repo.get_by_id(conv_uuid)
-                        if conv is None:
-                            conv = await conv_repo.create(user_id=user_id)
-                            conv_uuid = conv.id
-                        elif conv.user_id != user_id:
-                            await manager.send_error(
-                                connection_id,
-                                "Conversation not found for current user",
-                            )
-                            continue
-
-                    conversation_id = str(conv_uuid)
-
-                    await session_store.add_message(conversation_id, "user", msg.content)
-                    history = await session_store.get_history(conversation_id)
-
-                    await msg_repo.create(
-                        conversation_id=conv_uuid,
-                        role=MessageRole.user,
-                        content=msg.content,
-                    )
-
-                    agent_service = get_agent_service()
-                    full_response = []
-
-                    try:
-                        token_stream, sources, intent_result = await agent_service.process(
-                            question=msg.content,
-                            conversation_history=history,
-                            user_id=str(user_id),
-                            conversation_id=conversation_id,
-                        )
-
-                        if intent_result:
-                            await manager.send(
-                                connection_id,
-                                ServerMessage(
-                                    type=ServerMessageType.intent,
-                                    conversation_id=conversation_id,
-                                    data={
-                                        "label": intent_result.label,
-                                        "confidence": intent_result.confidence,
-                                    },
-                                ),
-                            )
-
-                        async for token_text in token_stream:
-                            if _cancel_flags.get(connection_id):
-                                break
-                            full_response.append(token_text)
-                            await manager.broadcast_token(
-                                connection_id, conversation_id, token_text
-                            )
-                    except Exception as e:
-                        logger.exception("agent_processing_error", error=str(e))
-                        error_msg = "Sorry, an error occurred. Please try again."
-                        full_response.append(error_msg)
-                        await manager.broadcast_token(
-                            connection_id, conversation_id, error_msg
-                        )
-                        sources = []
-
-                    response_text = "".join(full_response)
-                    await session_store.add_message(
-                        conversation_id, "assistant", response_text
-                    )
-                    await msg_repo.create(
-                        conversation_id=conv_uuid,
-                        role=MessageRole.assistant,
-                        content=response_text,
-                        intent=intent_result.label if intent_result else None,
-                        confidence=intent_result.confidence if intent_result else None,
-                        sources={"sources": sources} if sources else None,
-                    )
-                    await db.commit()
-
-                    if sources:
-                        await manager.send(
-                            connection_id,
-                            ServerMessage(
-                                type=ServerMessageType.source,
-                                conversation_id=conversation_id,
-                                data={"sources": sources},
-                            ),
-                        )
-
-                    await manager.send_message_end(
-                        connection_id, conversation_id, sources
-                    )
+                await process_user_message(user_id, connection_id, msg, is_cancelled)
 
     except WebSocketDisconnect:
         pass

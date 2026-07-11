@@ -14,10 +14,10 @@ exactly which AGENTS.md section it moves.
 
 | Folder | Spine | Status |
 |---|---|---|
-| [`agent-real-handoff/`](agent-real-handoff/) | "Agent + real handoff" — the customer-service story: tools that collect missing info via multi-turn slot-filling, plus a warm human handoff (summary → queue → staff inbox → return) replacing today's flag-and-forget. | Planned |
-| [`honest-rag/`](honest-rag/) | "Honest RAG" — the trust story: deterministic refusal when retrieval is weak, inline clickable `[n]` citations backed by a post-answer evidence self-check, and an answer-confidence badge in the chat UI. | Planned |
-| [`knowledge-loop/`](knowledge-loop/) | "Self-evolving knowledge base" — the closed loop: capture the questions the bot fails (gap radar), turn gaps + staff answers into reviewed knowledge entries published through the document pipeline, and quantify every KB change with an offline golden-set eval. | Planned |
-| [`ops-platform/`](ops-platform/) | "Ops platform" — the deployability story: DB-backed prompt templates with versioned CRUD (route-map cache pattern reused), audit log + PII masking, asynchronous document indexing with visible status, and a production deployment checklist + health dashboards. | Planned |
+| [`agent-real-handoff/`](agent-real-handoff/) | "Agent + real handoff" — the customer-service story: tools that collect missing info via multi-turn slot-filling, plus a warm human handoff (summary → queue → staff inbox → return) replacing today's flag-and-forget. | Implemented 2026-07-10 (business code; tests deferred) |
+| [`honest-rag/`](honest-rag/) | "Honest RAG" — the trust story: deterministic refusal when retrieval is weak, inline clickable `[n]` citations backed by a post-answer evidence self-check, and an answer-confidence badge in the chat UI. | Implemented 2026-07-09 (business code; tests deferred) |
+| [`knowledge-loop/`](knowledge-loop/) | "Self-evolving knowledge base" — the closed loop: capture the questions the bot fails (gap radar), turn gaps + staff answers into reviewed knowledge entries published through the document pipeline, and quantify every KB change with an offline golden-set eval. | Implemented 2026-07-09 (business code; tests deferred) |
+| [`ops-platform/`](ops-platform/) | "Ops platform" — the deployability story: DB-backed prompt templates with versioned CRUD (route-map cache pattern reused), audit log + PII masking, asynchronous document indexing with visible status, and a production deployment checklist + health dashboards. | In progress 2026-07-10 |
 
 ## Cross-initiative order
 

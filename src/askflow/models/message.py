@@ -14,6 +14,9 @@ class MessageRole(str, enum.Enum):
     user = "user"
     assistant = "assistant"
     system = "system"
+    # 人工客服回复（handoff 接管期间）；harness 历史白名单只认 user/assistant，
+    # 所以 staff 回复写入 Redis session 时镜像为 assistant（AGENTS.md §5）。
+    staff = "staff"
 
 
 class Message(Base, UUIDMixin, TimestampMixin):

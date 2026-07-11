@@ -65,6 +65,12 @@ ORDER_WEBHOOK_FAILURE_COUNT = Counter(
     registry=registry,
 )
 
+HANDOFF_TIMEOUT_COUNT = Counter(
+    "askflow_handoff_timeouts_total",
+    "Handoff sessions expired unclaimed and escalated to tickets",
+    registry=registry,
+)
+
 WS_CONNECTIONS = Gauge(
     "askflow_ws_connections_active",
     "Active WebSocket connections",

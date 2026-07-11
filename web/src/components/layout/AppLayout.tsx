@@ -3,9 +3,13 @@ import {
   MessageSquare,
   Ticket,
   BarChart3,
+  BookOpenCheck,
   FileText,
+  Headphones,
   Settings,
+  FileCode,
   LayoutDashboard,
+  Radar,
   LogOut,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
@@ -17,8 +21,12 @@ const allMenuItems = [
   { label: "数据看板", path: "/admin/dashboard", icon: BarChart3, roles: ["agent", "admin"] },
   { label: "工单看板", path: "/admin/tickets/dashboard", icon: LayoutDashboard, roles: ["agent", "admin"] },
   { label: "工单总览", path: "/admin/tickets", icon: Ticket, roles: ["agent", "admin"] },
+  { label: "人工接管", path: "/admin/handoffs", icon: Headphones, roles: ["agent", "admin"] },
   { label: "文档管理", path: "/admin/documents", icon: FileText, roles: ["agent", "admin"] },
   { label: "意图配置", path: "/admin/intents", icon: Settings, roles: ["agent", "admin"] },
+  { label: "提示词模板", path: "/admin/prompts", icon: FileCode, roles: ["agent", "admin"] },
+  { label: "知识缺口", path: "/admin/gaps", icon: Radar, roles: ["agent", "admin"] },
+  { label: "知识评审", path: "/admin/knowledge", icon: BookOpenCheck, roles: ["agent", "admin"] },
 ] as const;
 
 export function AppLayout() {

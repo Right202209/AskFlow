@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
 
 from askflow.agent.intent_classifier import IntentClassifier
 from askflow.agent.state import AgentState
 from askflow.core.logging import get_logger
-from askflow.rag.service import RAGService
+from askflow.rag.grounding import record_grounding_trace
+from askflow.rag.service import RAGService, RAGStreamResult
 from askflow.ticket.service import TicketService
 
 logger = get_logger(__name__)
@@ -37,13 +37,14 @@ async def classify_node(state: AgentState, classifier: IntentClassifier) -> Agen
 async def rag_node(state: AgentState, rag_service: RAGService) -> AgentState:
     """执行 RAG 查询，并把流式输出写回可变的 agent 状态。"""
     try:
-        token_stream, sources = await rag_service.query_stream(
+        result = await rag_service.query_stream(
             question=state.question,
             conversation_history=state.conversation_history,
         )
-        state.sources = sources
+        record_grounding_trace(state.harness_trace, result.grounding)
+        state.sources = result.sources
 
-        async for token in token_stream:
+        async for token in result.token_stream:
             state.response_tokens.append(token)
     except Exception as e:
         logger.error("rag_node_error", error=str(e))
@@ -51,14 +52,18 @@ async def rag_node(state: AgentState, rag_service: RAGService) -> AgentState:
     return state
 
 
-async def rag_stream_node(
-    state: AgentState, rag_service: RAGService
-) -> tuple[AsyncIterator[str], list[dict]]:
-    """直接返回 RAG 流，适合由上层 WebSocket/HTTP 逐 token 转发。"""
-    return await rag_service.query_stream(
+async def rag_stream_node(state: AgentState, rag_service: RAGService) -> RAGStreamResult:
+    """直接返回 RAG 流结果，适合由上层 WebSocket/HTTP 逐 token 转发。
+
+    检索证据强度（含弱检索拒答 flag）在这里写入 harness trace——
+    上层构建 ProcessResult 时 trace 已经携带 retrieval_confidence。
+    """
+    result = await rag_service.query_stream(
         question=state.question,
         conversation_history=state.conversation_history,
     )
+    record_grounding_trace(state.harness_trace, result.grounding)
+    return result
 
 
 async def ticket_node(state: AgentState, ticket_service: TicketService) -> AgentState:
@@ -117,8 +122,13 @@ async def ticket_node(state: AgentState, ticket_service: TicketService) -> Agent
 async def handoff_node(
     state: AgentState,
     conversation_repo=None,
+    handoff_service=None,
 ) -> AgentState:
-    """标记需要人工接管，并将会话状态更新为 transferred。"""
+    """标记需要人工接管：会话置 transferred，并把摘要+载荷入队到客服收件箱。
+
+    入队（agent/handoff.py::HandoffService.enqueue）失败只记日志——转接状态本身
+    已生效，超时清扫与收件箱兜底；绝不因队列故障把用户堵在原地。
+    """
     state.should_handoff = True
 
     if conversation_repo and state.conversation_id:
@@ -131,6 +141,12 @@ async def handoff_node(
         except Exception as e:
             logger.error("handoff_transfer_failed", error=str(e))
 
+    if handoff_service is not None and state.conversation_id:
+        try:
+            await handoff_service.enqueue(state)
+        except Exception as e:
+            logger.error("handoff_enqueue_failed", error=str(e))
+
     state.response_tokens = [
         "正在为您转接人工客服，请稍候。",
         "您的问题摘要和对话记录将一并转交给客服人员。",
@@ -142,13 +158,16 @@ async def tool_node(
     state: AgentState,
     llm_client=None,
     rag_service: RAGService | None = None,
+    conversation_repo=None,
 ) -> AgentState:
     """业务查询工具调用节点。
 
     通过 LLM 提取查询参数，调用对应的业务接口并返回格式化结果。
     目前支持的工具：order_query（订单查询）、knowledge_search（知识检索）。
-    后续可通过注册表扩展。
+    槽位缺失（needs_slot）时经 agent/slots.py 把挂起记录持久化到
+    conversations.metadata，成功结果则清档——多轮槽位填充的档案推进都在这里。
     """
+    from askflow.agent.slots import sync_pending_after_tool
     from askflow.agent.tools import execute_tool
 
     intent_label = state.intent.label if state.intent else "order_query"
@@ -164,6 +183,7 @@ async def tool_node(
         )
         state.tool_result = result
         state.response_tokens = [result.get("display", "查询完成，暂无更多信息。")]
+        await sync_pending_after_tool(state, result, conversation_repo)
     except Exception as e:
         logger.error("tool_node_error", tool=intent_label, error=str(e))
         state.error = str(e)
@@ -173,12 +193,15 @@ async def tool_node(
     return state
 
 
+# 澄清话术的代码兜底默认值：运行时优先读 DB 模板（core/prompts.py，键 agent.clarify）。
+CLARIFY_RESPONSE = "我不太确定您的需求，能否请您提供更多细节以便我更好地帮助您？"
+
+
 async def clarify_node(state: AgentState) -> AgentState:
-    """在分类置信度不足时，要求用户补充信息。"""
-    state.response_tokens = [
-        "我不太确定您的需求，",
-        "能否请您提供更多细节以便我更好地帮助您？",
-    ]
+    """在分类置信度不足时，要求用户补充信息（文案可经 admin 提示词模板调整）。"""
+    from askflow.core.prompts import PROMPT_KEY_AGENT_CLARIFY, get_prompt
+
+    state.response_tokens = [await get_prompt(PROMPT_KEY_AGENT_CLARIFY)]
     return state
 
 

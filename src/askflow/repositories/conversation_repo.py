@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +51,12 @@ class ConversationRepo:
             .offset(offset)
         )
         result = await self._db.execute(stmt)
-        return list(result.scalars().all())
+        conversations: list[Conversation] = []
+        for conv, preview in result.all():
+            # 预览列不在 ORM 映射里，挂成实例属性让 ConversationResponse(from_attributes) 能读到。
+            conv.last_message_preview = preview
+            conversations.append(conv)
+        return conversations
 
     async def update_title(self, conv_id: uuid.UUID, title: str | None) -> Conversation | None:
         conv = await self.get_by_id(conv_id)
@@ -70,6 +74,25 @@ class ConversationRepo:
             conv.status = status
             await self._db.flush()
             await self._db.refresh(conv)
+        return conv
+
+    async def update_metadata(self, conv_id: uuid.UUID, patch: dict) -> Conversation | None:
+        """merge-patch 更新 metadata JSONB：只合并给定 key，value=None 表示删除该 key。
+
+        绝不整体覆盖——metadata 可能同时承载 pending_tool 之外的其他键。
+        JSONB 列必须重新赋值新 dict，原地修改不会触发 SQLAlchemy 变更检测。
+        """
+        conv = await self.get_by_id(conv_id)
+        if conv is None:
+            return None
+        merged = dict(conv.metadata_ or {})
+        for key, value in patch.items():
+            if value is None:
+                merged.pop(key, None)
+            else:
+                merged[key] = value
+        conv.metadata_ = merged
+        await self._db.flush()
         return conv
 
     async def delete(self, conv_id: uuid.UUID) -> bool:

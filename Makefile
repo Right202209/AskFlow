@@ -1,4 +1,4 @@
-.PHONY: dev test seed migrate lint clean docker-up docker-down create-user install-web dev-web build-web
+.PHONY: dev test seed migrate lint clean docker-up docker-down create-user install-web dev-web build-web eval eval-seed eval-report
 
 PYTHON ?= python
 PIP ?= pip
@@ -31,6 +31,15 @@ create-user:
 
 test:
 	$(PYTHON) -m pytest tests/ -v --cov=src/askflow --cov-report=term-missing
+
+eval: ## 对本地栈跑离线评估套件（需先 make eval-seed）
+	$(PYTHON) -m eval.harness.run_eval --suite all
+
+eval-seed: ## （重）播种评估语料文档并写出 corpus_map.json
+	$(PYTHON) -m eval.harness.seed_corpus
+
+eval-report: ## 查看最近若干轮评估的质量趋势（回归时非零退出）
+	$(PYTHON) -m eval.harness.report --last 10
 
 lint:
 	$(PYTHON) -m ruff check src/ tests/

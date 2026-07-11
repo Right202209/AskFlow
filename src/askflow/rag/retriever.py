@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from askflow.core.logging import get_logger
 from askflow.embedding.embedder import Embedder
@@ -20,6 +20,9 @@ class RetrievalResult:
     metadata: dict
     score: float
     source: str  # "vector" | "bm25" | "fused"
+    # fused 结果保留底层通道的原始分（{"vector": .., "bm25": ..}），
+    # 供 rag/grounding.py 做跨通道归一化——RRF 融合分本身不可比阈值。
+    raw_scores: dict[str, float] = field(default_factory=dict)
 
 
 class HybridRetriever:
@@ -118,17 +121,20 @@ class HybridRetriever:
         """使用 RRF 融合两路排序，避免任一检索器完全主导结果。"""
         scores: dict[str, float] = {}
         doc_map: dict[str, RetrievalResult] = {}
+        raw_scores: dict[str, dict[str, float]] = {}
 
         for rank, item in enumerate(vector_results):
             rrf = vector_weight / (k + rank + 1)
             scores[item.id] = scores.get(item.id, 0) + rrf
             doc_map[item.id] = item
+            raw_scores.setdefault(item.id, {})["vector"] = item.score
 
         for rank, item in enumerate(bm25_results):
             rrf = bm25_weight / (k + rank + 1)
             scores[item.id] = scores.get(item.id, 0) + rrf
             if item.id not in doc_map:
                 doc_map[item.id] = item
+            raw_scores.setdefault(item.id, {})["bm25"] = item.score
 
         sorted_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)[:top_k]
         return [
@@ -138,6 +144,7 @@ class HybridRetriever:
                 metadata=doc_map[did].metadata,
                 score=scores[did],
                 source="fused",
+                raw_scores=raw_scores.get(did, {}),
             )
             for did in sorted_ids
         ]

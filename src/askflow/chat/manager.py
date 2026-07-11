@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from fastapi import WebSocket
 
-from askflow.chat.protocol import ServerMessage, ServerMessageType
+from askflow.chat.protocol import MessageEndPayload, ServerMessage, ServerMessageType
 from askflow.core.logging import get_logger
 from askflow.core.metrics import WS_CONNECTIONS
 
@@ -53,20 +53,18 @@ class ConnectionManager:
         self,
         connection_id: str,
         conversation_id: str,
-        sources: list[dict] | None = None,
-        message_id: str | None = None,
+        payload: MessageEndPayload | None = None,
     ) -> None:
         # message_id 透传给前端，让 👍/👎 按钮能拿到目标消息的 UUID 去调
-        # POST /api/v1/chat/messages/{id}/feedback。
-        payload: dict = {"sources": sources or []}
-        if message_id:
-            payload["message_id"] = message_id
+        # POST /api/v1/chat/messages/{id}/feedback；verification / answer_confidence
+        # 同帧携带（无新帧类型，见 plan-docs/honest-rag/02 D6）。
+        payload = payload or MessageEndPayload()
         await self.send(
             connection_id,
             ServerMessage(
                 type=ServerMessageType.message_end,
                 conversation_id=conversation_id,
-                data=payload,
+                data=payload.to_data(),
             ),
         )
 

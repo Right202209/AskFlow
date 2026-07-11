@@ -32,6 +32,18 @@ class ForbiddenError(AskFlowError):
         super().__init__(message, status_code=403)
 
 
+class ConflictError(AskFlowError):
+    def __init__(self, message: str = "Conflict") -> None:
+        super().__init__(message, status_code=409)
+
+
+class UnprocessableError(AskFlowError):
+    """业务级 422：请求语法合法但内容不可接受（如提示词占位符渲染校验失败）。"""
+
+    def __init__(self, message: str = "Unprocessable content") -> None:
+        super().__init__(message, status_code=422)
+
+
 class RateLimitError(AskFlowError):
     def __init__(self, message: str = "Rate limit exceeded") -> None:
         super().__init__(message, status_code=429)

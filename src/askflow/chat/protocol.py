@@ -22,6 +22,9 @@ class ServerMessageType(str, Enum):
     source = "source"
     ticket = "ticket"
     handoff = "handoff"
+    # 人工接管协议（agent-real-handoff/02）：客服回复与接管状态变更。
+    staff_message = "staff_message"
+    handoff_update = "handoff_update"
     pong = "pong"
 
 
@@ -43,3 +46,22 @@ class ServerMessage(BaseModel):
     def to_json(self) -> str:
         msg = self.model_copy(update={"timestamp": int(time.time())})
         return msg.model_dump_json()
+
+
+class MessageEndPayload(BaseModel):
+    """message_end 帧 data 的唯一构造点：REST 持久化与 WS 下发共用同一份字段。"""
+
+    sources: list[dict] = []
+    message_id: str | None = None
+    verification: dict[str, Any] | None = None
+    answer_confidence: dict[str, Any] | None = None
+
+    def to_data(self) -> dict[str, Any]:
+        data: dict[str, Any] = {"sources": self.sources}
+        if self.message_id:
+            data["message_id"] = self.message_id
+        if self.verification is not None:
+            data["verification"] = self.verification
+        if self.answer_confidence is not None:
+            data["answer_confidence"] = self.answer_confidence
+        return data

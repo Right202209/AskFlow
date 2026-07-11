@@ -153,6 +153,13 @@ def rag_stack(tmp_path, shared_bm25, monkeypatch):
     embedder = DeterministicEmbedder(vocab)
     vector_store = InMemoryVectorStore()
 
+    # 玩具词袋 embedder 的余弦分数普遍低于真实 embedding 模型，会误触发弱检索拒答。
+    # 阈值本身有专门单测（test_rag_grounding / test_rag_refusal），这里置 0
+    # 只保留"零命中仍拒答"的行为，让集成断言聚焦检索链路本身。
+    from askflow.rag import grounding as grounding_module
+
+    monkeypatch.setattr(grounding_module, "GROUNDED_CONFIDENCE_THRESHOLD", 0.0)
+
     # 屏蔽真实文件解析——直接把 content_bytes 当作 UTF-8 文本。
     from askflow.embedding import service as svc_module
 

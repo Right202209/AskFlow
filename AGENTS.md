@@ -1,7 +1,7 @@
 # AGENTS.md — AskFlow Agent Business Contract
 
 > Owner: Agent / Chat 子系统
-> 最后核对：2026-05-20（对源码 `src/askflow/agent/*`）
+> 最后核对：2026-07-10（对源码 `src/askflow/agent/*`）
 > 配套文档：[`PRD.md`](PRD.md) §4.2–§4.4 / [`TRELLIS.md`](TRELLIS.md) / [`docs/status/STATUS.md`](docs/status/STATUS.md)
 
 本文件定义 AskFlow 客服 Agent 的可执行行为契约：**意图清单 → 路由决策 → 工具签名 → Harness 策略 → Handoff 协议**。所有 `src/askflow/agent/` 修改必须与本文件双向同步；改一方而不更新另一方视为违反契约。
@@ -27,6 +27,8 @@
 2. **LLM 二次判断**：调 `INTENT_PROMPT` 拿 `{intent, confidence}` JSON；与规则结果比较，置信度高者胜出。LLM 返回 `confidence < 0.7` 自动 `needs_clarification=True`。
 3. **LLM 失败回退**：返回规则结果；若规则也未命中，返回 `DEFAULT_INTENT="faq"`、`confidence=0.5`、`needs_clarification=True`。
 4. **歧义防护**：`handoff` 必须命中 `HANDOFF_PATTERNS`——避免 `"I want to talk to the AI agent"` / `"sales agent"` / `"human override"` 等误判。
+
+> **提示词来源（ops-platform/01）**：LLM 二次判断用的分类提示词以 DB 模板 `intent.classifier` 为准（admin 后台「提示词模板」可热更新），`intent_classifier.py::INTENT_PROMPT` 仅作 DB 缺失/不可用时的代码兜底。模板**必须保留 `{message}` 占位符且六个意图标签不可删改**——写入时服务层 `content.format(...)` 渲染校验只能拦住占位符错拼，删标签不会报错但会让分类退化，前端编辑页对该 key 显式警示。同理 `clarify` 澄清话术走模板 `agent.clarify`（`nodes.py::CLARIFY_RESPONSE` 为兜底）。
 
 ### 1.2 待实现：`out_of_scope` 兜底
 
@@ -105,9 +107,18 @@
 }
 ```
 
-### 3.3 工具入参未提取兜底
+### 3.3 槽位填充（多轮工具入参收集）
 
-当前 `execute_tool` 在 `search_order` 抽不到订单号时直接返回引导文案（"请提供形如 AB12345678 的订单号"）。**待优化**：任务 `05-16-search-order-clarify-fallback` 回退到 Agent `clarify` 分支并携带会话历史。
+`search_order` 抽不到订单号不再是死胡同：`execute_tool` 返回追问文案 + `needs_slot="order_id"`，`tool_node` 经 `agent/slots.py` 把挂起记录持久化到 `conversations.metadata` 的 `pending_tool` 键（durable、跨 worker；结构 `{tool, slot, intent, turns_waited}`），下一轮由 `AgentService.process` 在**分类之前**做续跑判定：
+
+| 来消息 | 决策 |
+|---|---|
+| 命中 `ORDER_ID_PATTERN` | **续跑**：跳过分类，`intent = (pending.intent, RESUME_SLOT_CONFIDENCE=0.9)`（高于 harness 低置信线 0.5，防止被改写成 clarify），候选路由 `tool`；工具成功后清档 |
+| 未命中 → 分类为**同一意图** | `turns_waited` +1 继续追问；达到 `MAX_SLOT_TURNS=3` 清档转 `clarify`（不无限追问） |
+| 未命中 → 分类为**不同意图**且置信度 ≥ `ABANDON_CONFIDENCE=0.7` | **弃槽**：清档，按新意图正常路由（`handoff` 等自然接管） |
+| 未命中 → 不同意图但置信度不足 | 保留槽位走正常路由，下一轮补号仍可续跑 |
+
+正则先于分类是刻意的：裸订单号（"AB12345678"）没有关键词特征，抽取不能依赖分类结果。清档一律是 merge-patch（只删 `pending_tool` 键，不覆盖整个 metadata）。任务 `05-16-search-order-clarify-fallback` 由此收口。
 
 ### 3.4 新增工具的扩展点
 
@@ -125,6 +136,8 @@
 ## 4. Cognitive Harness 策略
 
 Harness 是绕 Agent 图的确定性安全护栏，定义在 `src/askflow/agent/harness.py::CognitiveHarnessPolicy`（`version="askflow-cognitive-harness-v1"`）。四个工作点：
+
+> **提示词模板边界（ops-platform/01 D3）**：可热更新的 DB 模板只覆盖 RAG（`rag.system`/`rag.context`/`rag.fallback_no_results`/`rag.fallback_llm_down`）、分类（`intent.classifier`）、澄清（`agent.clarify`）六个 key。**Harness 自身的文案（硬拒绝提示、`fallback_response`、`response_truncated_notice`、注入拒绝语）是代码常量，不进模板表**——它们是安全护栏的一部分，必须随代码版本走、可被测试锚定，不能被运营在线改写。
 
 ### 4.1 `prepare()` — 入参规整与硬拒绝
 
@@ -154,53 +167,70 @@ Harness 是绕 Agent 图的确定性安全护栏，定义在 `src/askflow/agent/
 
 ### 4.4 `wrap_stream()` — 流式分支输出约束
 
-逐 token 累计字符数；超过 `max_response_chars` 立刻截断并 yield `response_truncated_notice`。整段无输出时 yield `fallback_response`。**不缓存全量答复**，保持流式语义。
+逐 token 累计字符数；超过 `max_response_chars` 立刻截断并 yield `response_truncated_notice`。整段无输出时 yield `fallback_response`。**不缓存全量答复**，保持流式语义。注意：RAG 回答现携带 `[n]` 行内引用标记（编号与 sources[].index 对齐），截断可能切掉尾部引用——自检层（`rag/verifier.py`）对"零可查引用"按 `skipped` 处理而非报错。
 
 ### 4.5 Harness 追踪与监测
 
 - 每次决策落入 `AgentState.harness_trace`，固定包含 `run_id / policy_version / question_chars / history_messages / flags`；分支更新追加 `action / reason / route / candidate_route / intent / confidence / response_chars`；
+- `rag` 路由额外追加检索证据字段：`retrieval_confidence`（0..1，按检索通道归一化）与 `retrieval_channel`（`vector | bm25 | fused | empty`）；检索证据不足触发确定性拒答时追加 flag `weak_retrieval_refusal`（判定逻辑集中在 `rag/grounding.py`，拒答直接返回固定文案、不调 LLM，弱证据来源仍随响应下发）。该拒答是**检索后**的证据判定，与 §1.2 计划中的 `out_of_scope`（分类期、检索前）互补而非替代；
+- 回答后证据自检（`rag/verifier.py`）新增 flag：`verify_skipped`（自检超时/失败/无引用可查）与 `invalid_citations`（答案出现越界 `[n]` 标记）；自检结论持久化在 `messages.extra.verification`，回答置信度在 `messages.extra.answer_confidence`（`chat/confidence.py` 计算，`messages.confidence` 列仍表示**意图**置信度）；
+- 槽位续跑轮追加 flag `slot_resume`（`agent/slots.py`，§3.3）——admin 的 harness flag 分布因此能统计多轮槽位填充的续跑量；
 - 持久化路径：`messages.extra.harness_trace`（JSONB）；
 - Admin Dashboard 暴露 `harness_reason_distribution` / `harness_flag_distribution` / `harness_fallback_rate` / `harness_truncate_rate`（`admin/analytics.py`）。
+- **消费者契约（knowledge-loop 知识缺口雷达）**：`knowledge/gap_recorder.py` 作为**被动消费者**读取 `harness_trace` 的 `route` / `reason` / `flags` 与 `retrieval_confidence` 字段来识别失败信号（`clarify` / `rag_refusal` / `low_retrieval_score` / `handoff`），不改变任何路由行为。这三个 key 因此成为稳定读契约：改名或改语义前需同步 `gap_recorder.py`。拒答识别复用 `rag/grounding.py::REFUSAL_RESPONSE`、`rag/prompt_builder.py::NO_RESULTS_REFUSAL`、`harness` 的 `fallback_response` 三个常量（非子串启发式）。捕获全程 best-effort，异常只记 `gap_record_failed` 不回抛聊天主流程。
 
 ---
 
-## 5. Handoff 协议（最小实现，Wave 2 完善）
+## 5. Handoff 协议（已实现，agent-real-handoff/02）
 
-### 5.1 当前实现
+### 5.1 转接轮（AI → 人工）
 
 `src/askflow/agent/nodes.py::handoff_node`：
 
 1. `state.should_handoff = True`；
 2. 若拿到 `conversation_repo` + 合法 `conversation_id`，置 `Conversation.status = transferred`；
-3. 回固定话术："正在为您转接人工客服，请稍候。您的问题摘要和对话记录将一并转交给客服人员。"
+3. 若拿到 `handoff_service`，调 `HandoffService.enqueue(state)` 入队（失败只记 `handoff_enqueue_failed`，不影响转接状态本身）；
+4. 回固定话术："正在为您转接人工客服，请稍候。您的问题摘要和对话记录将一并转交给客服人员。"
 
-`chat/service.py` 收到 `should_handoff=True` 后向 WebSocket 推 `ServerMessageType.handoff` 帧 `{transferred: True}`。
+`chat/turns.py` 收到 `should_handoff=True` 后向 WebSocket 推 `handoff` 帧 `{transferred: True}`（前端据此进入"排队等待认领"状态）。
 
-### 5.2 缺口
+### 5.2 载荷与摘要（`agent/handoff.py`）
 
-| 缺口 | 影响 |
-|---|---|
-| 摘要 API 未实现 | 话术承诺与代码不符 |
-| 无人工坐席队列 | 转接后无 downstream 接单方 |
-| 无超时兜底 | 用户在"转接中"黑洞里等待 |
-| 无 人工 → AI 回流状态机 | 客服解决后无法把对话还给 AI 继续 |
-| 前端无客服接管 UI | 客服侧零工具 |
-
-### 5.3 计划落地（Wave 2 — 任务 `05-16-handoff-protocol`）
-
-**`HandoffPayload` 契约**（草案，Wave 2 brainstorm 落锤）：
+`HandoffSession.payload`（JSONB）实际形状：
 
 ```python
 {
-    "summary": str,                   # LLM 生成的对话摘要
-    "recent_messages": list[Message], # 最近 N 条原文
-    "intent_history": list[str],      # 路径上的意图序列
-    "user_meta": {"user_id", "role", "session_start_at", ...},
-    "ticket_refs": list[str],         # 相关工单 id
+    "recent_messages": [{"role", "content", "created_at"}],  # MessageRepo.list_recent，最近 HANDOFF_RECENT_MESSAGES=10 条（durable，不用 Redis 镜像）
+    "intent_history": list[str],                             # 消息序列上去重后的意图路径
+    "user_meta": {"user_id", "session_start_at"},
+    "ticket_refs": list[str],                                # 同会话关联工单 id
+    "flags": ["summary_failed"?],                            # 摘要失败时追加
 }
 ```
 
-**关键流程**：`handoff_node` → 摘要生成 → 入队 → 通知坐席 → `handoff_pickup_timeout_min` 内未接 → 兜底（回 AI / 升级 / 告警）。
+**摘要失败策略（D4）**：摘要同步生成但带硬超时 `HANDOFF_SUMMARY_TIMEOUT_S=8`；超时/LLM 异常一律降级为"仅转录"载荷（`summary=""` + `payload.flags += ["summary_failed"]`），转接绝不因 LLM 阻塞或失败。
+
+### 5.3 会话生命周期与状态机
+
+`HandoffSession.status`: `queued → claimed → resolved | returned`；`queued → timed_out`（超时清扫）。
+
+- **一会话一开放接管**：partial unique index `uniq_open_handoff_per_conversation`（`WHERE status IN ('queued','claimed')`，alembic `20260710_01`）+ `HandoffRepo.create` 的 `ON CONFLICT DO NOTHING` → 回查 `find_open_by_conversation`。重复转接收敛到已有 open session。
+- **认领竞态**：`HandoffRepo.claim` 是条件 UPDATE（`WHERE status='queued'`），输家收 409（`ConflictError`）。回复/关闭仅限当前 `assignee`。
+
+### 5.4 transferred 网关与 staff 角色镜像
+
+- **网关**（`chat/service.py::_handle_transferred_message`）：会话处于 `transferred` 时，用户消息照常落库 + 写 Redis 会话镜像，但**绝不派发给 AI**；回 `handoff_update` 回执，客服已认领则经推送桥转发 `{status, new_user_message}`。
+- **staff 镜像为 assistant（D8）**：客服回复 DB 落库为 `Message(role=staff)`（渲染/审计可区分人机），但 Redis 会话镜像写成 `assistant`——§4.1 的 `allowed_history_roles={"user","assistant"}` 会丢弃其他角色，若按 `staff` 镜像，暖回流后 AI 将看不到人工说过什么。**不要**为此扩大 harness 白名单。
+- **跨 worker 推送桥**（`chat/push.py`）：Redis 频道 `askflow:chat:push`，客服操作（认领/回复/关闭）与超时通知经 `publish_user_push` 送达用户全部在线连接；帧类型 `staff_message`（`{content, staff_name}`）与 `handoff_update`（`{status, ticket_id?}`）。
+
+### 5.5 超时兜底与暖回流
+
+- **超时清扫**：lifespan 后台任务每 `HANDOFF_SWEEP_INTERVAL_S=60` 秒执行 `sweep_expired`（`FOR UPDATE SKIP LOCKED`，多 worker 不重复升级）。`queued` 超过 `handoff_pickup_timeout_min`（settings，默认 10 分钟）：经 **`TicketRepo.create`**（§6 强制路径）创建 `handoff_timeout` 高优工单 → 标 `timed_out` → **会话回 `active`（AI 恢复应答，避免既无客服也无 AI 的黑洞）** → 推 `handoff_update {status: timed_out, ticket_id}` → `HANDOFF_TIMEOUT_COUNT` 计数。
+- **暖回流**：`resolve` 端点把 `claimed` 关闭为 `resolved`（默认会话回 `active`，`close_conversation=true` 则 `closed`）或 `returned`（显式"交还 AI"）。回流后 AI 的下一轮能在历史中看到镜像后的人工轮次（§5.4）。
+
+### 5.6 客服收件箱
+
+`/api/v1/admin/handoffs`（`admin/handoff_router.py`，staff 角色）：列表（按 status 过滤）/ 详情（session + 全量消息）/ 认领 / 回复 / 关闭。前端 `web/src/pages/Admin/HandoffsPage.tsx`；用户侧横幅与 staff 气泡在 `ChatPage.tsx` / `MessageBubble.tsx`（`chatStore.handoffStatus` 驱动）。
 
 ---
 
@@ -227,6 +257,20 @@ Harness 是绕 Agent 图的确定性安全护栏，定义在 `src/askflow/agent/
 | Agent 图 | `src/askflow/agent/graph.py` |
 | Agent 服务（orchestrator + route map 缓存） | `src/askflow/agent/service.py` |
 | 工具注册 | `src/askflow/agent/tools.py` |
+| 槽位填充（pending_tool 读写 + 续跑判定） | `src/askflow/agent/slots.py` |
 | Harness | `src/askflow/agent/harness.py` |
+| RAG 证据强度评估（弱检索拒答） | `src/askflow/rag/grounding.py` |
+| RAG 证据自检（引用核查） | `src/askflow/rag/verifier.py` |
+| 回答置信度 | `src/askflow/chat/confidence.py` |
+| 知识缺口雷达（harness trace 消费者） | `src/askflow/knowledge/gap_recorder.py` |
+| Handoff 服务（载荷/摘要/入队/超时清扫） | `src/askflow/agent/handoff.py` |
+| Handoff 会话仓储（认领/关闭/清扫 SQL） | `src/askflow/repositories/handoff_repo.py` |
+| 客服收件箱 API | `src/askflow/admin/handoff_router.py` |
+| 跨 worker 用户推送桥 | `src/askflow/chat/push.py` |
+| 一轮 agent 交互驱动（事件推送半边） | `src/askflow/chat/turns.py` |
 | 状态 | `src/askflow/agent/state.py` |
 | Admin intent CRUD（pub/sub publisher） | `src/askflow/admin/service.py` |
+| 配置缓存基类（TTL + epoch + pub/sub） | `src/askflow/core/config_cache.py` |
+| 提示词读路径（get_prompt + 兜底常量） | `src/askflow/core/prompts.py` |
+| 提示词模板仓储（版本追加/激活） | `src/askflow/repositories/prompt_repo.py` |
+| 提示词模板 CRUD API | `src/askflow/admin/prompt_router.py` |

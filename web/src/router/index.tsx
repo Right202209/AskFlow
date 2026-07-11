@@ -8,7 +8,11 @@ import { TicketsPage } from "@/pages/App/TicketsPage";
 import { TicketDetailPage } from "@/pages/App/TicketDetailPage";
 import { DashboardPage } from "@/pages/Admin/DashboardPage";
 import { DocumentsPage } from "@/pages/Admin/DocumentsPage";
+import { GapsPage } from "@/pages/Admin/GapsPage";
+import { HandoffsPage } from "@/pages/Admin/HandoffsPage";
 import { IntentsPage } from "@/pages/Admin/IntentsPage";
+import { KnowledgePage } from "@/pages/Admin/KnowledgePage";
+import { PromptsPage } from "@/pages/Admin/PromptsPage";
 import { TicketDashboard } from "@/pages/Admin/TicketDashboard";
 import { TicketsOverviewPage } from "@/pages/Admin/TicketsOverviewPage";
 
@@ -34,6 +38,10 @@ export const router = createBrowserRouter([
           { path: "/admin/tickets/dashboard", element: <TicketDashboard /> },
           { path: "/admin/documents", element: <DocumentsPage /> },
           { path: "/admin/intents", element: <IntentsPage /> },
+          { path: "/admin/prompts", element: <PromptsPage /> },
+          { path: "/admin/gaps", element: <GapsPage /> },
+          { path: "/admin/knowledge", element: <KnowledgePage /> },
+          { path: "/admin/handoffs", element: <HandoffsPage /> },
         ],
       },
     ],

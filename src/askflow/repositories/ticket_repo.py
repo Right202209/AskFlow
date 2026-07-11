@@ -3,7 +3,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import and_, func, select
+import sqlalchemy as sa
+from sqlalchemy import String, and_, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.core.logging import get_logger
@@ -97,9 +99,7 @@ class TicketRepo:
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
-    async def update_status(
-        self, ticket_id: uuid.UUID, status: TicketStatus
-    ) -> Ticket | None:
+    async def update_status(self, ticket_id: uuid.UUID, status: TicketStatus) -> Ticket | None:
         ticket = await self.get_by_id(ticket_id)
         if ticket:
             ticket.status = status
@@ -185,6 +185,47 @@ class TicketRepo:
         result = await self._db.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_for_staff(
+        self,
+        *,
+        limit: int = 20,
+        offset: int = 0,
+        status: str | None = None,
+        priority: str | None = None,
+        assignee: str | None = None,
+        query: str | None = None,
+    ) -> list[Ticket]:
+        """客服/管理员视角的全量工单检索，支持状态/优先级/负责人/关键词过滤。"""
+        stmt = self._build_filtered_query(
+            user_id=None,
+            status=status,
+            priority=priority,
+            assignee=assignee,
+            query=query,
+        )
+        stmt = stmt.order_by(Ticket.created_at.desc()).limit(limit).offset(offset)
+        result = await self._db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_for_staff(
+        self,
+        *,
+        status: str | None = None,
+        priority: str | None = None,
+        assignee: str | None = None,
+        query: str | None = None,
+    ) -> int:
+        stmt = self._build_filtered_query(
+            user_id=None,
+            status=status,
+            priority=priority,
+            assignee=assignee,
+            query=query,
+            count_only=True,
+        )
+        result = await self._db.execute(stmt)
+        return result.scalar() or 0
+
     async def count_all(self, status: TicketStatus | None = None) -> int:
         stmt = select(func.count(Ticket.id))
         if status is not None:
@@ -192,10 +233,20 @@ class TicketRepo:
         result = await self._db.execute(stmt)
         return result.scalar() or 0
 
-    async def count_by_user(self, user_id: uuid.UUID, status: TicketStatus | None = None) -> int:
-        stmt = select(func.count(Ticket.id)).where(Ticket.user_id == user_id)
-        if status is not None:
-            stmt = stmt.where(Ticket.status == status)
+    async def count_by_user(
+        self,
+        user_id: uuid.UUID,
+        status: str | None = None,
+        query: str | None = None,
+    ) -> int:
+        stmt = self._build_filtered_query(
+            user_id=user_id,
+            status=status,
+            priority=None,
+            assignee=None,
+            query=query,
+            count_only=True,
+        )
         result = await self._db.execute(stmt)
         return result.scalar() or 0
 

@@ -90,10 +90,11 @@ class TestRAGService:
         llm.chat_stream = MagicMock(return_value=make_stream(["Use", " settings"]))
         service = RAGService(retriever, reranker, llm)
 
-        stream, sources = await service.query_stream("How do I reset my password?")
+        result = await service.query_stream("How do I reset my password?")
 
-        assert sources[0]["title"] == "Password Reset"
-        assert await collect_stream(stream) == ["Use", " settings"]
+        assert result.sources[0]["title"] == "Password Reset"
+        assert result.grounding.grounded is True
+        assert await collect_stream(result.token_stream) == ["Use", " settings"]
 
     @pytest.mark.asyncio
     async def test_query_stream_falls_back_when_streaming_fails(self):
@@ -111,8 +112,8 @@ class TestRAGService:
         llm.chat_stream = failing_stream
         service = RAGService(retriever, reranker, llm)
 
-        stream, _sources = await service.query_stream("How do I reset my password?")
+        result = await service.query_stream("How do I reset my password?")
 
-        chunks = await collect_stream(stream)
+        chunks = await collect_stream(result.token_stream)
         assert len(chunks) == 1
         assert "AI generation is temporarily unavailable." in chunks[0]

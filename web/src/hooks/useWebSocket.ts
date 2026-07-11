@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useChatStore } from "@/stores/chatStore";
-import type { ClientMessage, ServerMessage } from "@/types/chat";
+import type {
+  AnswerConfidence,
+  ClientMessage,
+  HandoffStatus,
+  ServerMessage,
+  Source,
+  Verification,
+} from "@/types/chat";
 
 const HEARTBEAT_INTERVAL = 30_000;
 const RECONNECT_BASE_DELAY = 1_000;
@@ -16,6 +23,10 @@ export function useWebSocket() {
   const setIntent = useChatStore((s) => s.setIntent);
   const setSources = useChatStore((s) => s.setSources);
   const setPendingAssistantMessageId = useChatStore((s) => s.setPendingAssistantMessageId);
+  const setPendingVerification = useChatStore((s) => s.setPendingVerification);
+  const setPendingAnswerConfidence = useChatStore((s) => s.setPendingAnswerConfidence);
+  const setHandoffStatus = useChatStore((s) => s.setHandoffStatus);
+  const addStaffMessage = useChatStore((s) => s.addStaffMessage);
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     token ? "connecting" : "idle",
   );
@@ -117,11 +128,15 @@ export function useWebSocket() {
           appendToken((msg.data?.content as string) ?? "");
           break;
         case "message_end":
-          // 服务端在 message_end 里带上 message_id，让前端 finalizeMessage 用真实
-          // UUID 落库，👍/👎 按钮直接基于这条 ID 调 feedback 接口。
+          // 服务端在 message_end 里带上 message_id / verification / answer_confidence，
+          // 让 finalizeMessage 用真实 UUID 落库并把自检结论、置信度并入消息。
           if (msg.data?.message_id) {
             setPendingAssistantMessageId(msg.data.message_id as string);
           }
+          setPendingVerification((msg.data?.verification as Verification | undefined) ?? null);
+          setPendingAnswerConfidence(
+            (msg.data?.answer_confidence as AnswerConfidence | undefined) ?? null,
+          );
           if (msg.conversation_id) finalizeMessage(msg.conversation_id);
           break;
         case "intent":
@@ -131,7 +146,29 @@ export function useWebSocket() {
           });
           break;
         case "source":
-          setSources((msg.data?.sources as Array<{ title: string; chunk: string; score: number }>) ?? []);
+          setSources((msg.data?.sources as Source[]) ?? []);
+          break;
+        case "handoff":
+          // 转接轮的即时确认帧：会话已入队等待客服认领。
+          if (msg.conversation_id) setHandoffStatus(msg.conversation_id, "queued");
+          break;
+        case "handoff_update":
+          if (msg.conversation_id) {
+            setHandoffStatus(
+              msg.conversation_id,
+              (msg.data?.status as HandoffStatus | undefined) ?? null,
+              (msg.data?.ticket_id as string | undefined) ?? null,
+            );
+          }
+          break;
+        case "staff_message":
+          if (msg.conversation_id) {
+            addStaffMessage(
+              msg.conversation_id,
+              (msg.data?.content as string) ?? "",
+              (msg.data?.staff_name as string | undefined) ?? null,
+            );
+          }
           break;
         case "error":
           console.error("WebSocket error:", msg.data);
@@ -162,7 +199,20 @@ export function useWebSocket() {
         connect();
       }, delay);
     };
-  }, [token, clearTimers, disposeSocket, appendToken, finalizeMessage, setIntent, setSources, setPendingAssistantMessageId]);
+  }, [
+    token,
+    clearTimers,
+    disposeSocket,
+    appendToken,
+    finalizeMessage,
+    setIntent,
+    setSources,
+    setPendingAssistantMessageId,
+    setPendingVerification,
+    setPendingAnswerConfidence,
+    setHandoffStatus,
+    addStaffMessage,
+  ]);
 
   useEffect(() => {
     if (!token) {

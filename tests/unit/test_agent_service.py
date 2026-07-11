@@ -9,6 +9,8 @@ import askflow.agent.service as agent_service_module
 from askflow.agent.harness import CognitiveHarness, CognitiveHarnessPolicy
 from askflow.agent.service import AgentService, invalidate_route_map_cache
 from askflow.agent.state import AgentState
+from askflow.rag.grounding import GroundingAssessment
+from askflow.rag.service import RAGStreamResult
 from askflow.schemas.intent import IntentResult
 
 
@@ -22,6 +24,15 @@ def make_stream(chunks):
             yield chunk
 
     return _stream()
+
+
+def make_stream_result(chunks, sources):
+    grounding = GroundingAssessment(
+        confidence=0.9, grounded=True, top_score=0.9, channel="vector"
+    )
+    return RAGStreamResult(
+        token_stream=make_stream(chunks), sources=sources, grounding=grounding
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -43,7 +54,7 @@ class TestAgentService:
             return state
 
         async def fake_rag_stream_node(state, _rag_service):
-            return make_stream(["hello", " world"]), [{"title": "FAQ", "score": 0.9}]
+            return make_stream_result(["hello", " world"], [{"title": "FAQ", "score": 0.9}])
 
         monkeypatch.setattr(agent_nodes, "classify_node", fake_classify_node)
         monkeypatch.setattr(agent_service_module, "_load_route_map", AsyncMock(return_value={}))

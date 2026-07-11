@@ -8,6 +8,8 @@ interface MessageListProps {
   streamingTokens: string;
   isLoading: boolean;
   endRef: RefObject<HTMLDivElement | null>;
+  /** 人工接管期间 AI 不应答，挂起"AI 思考中"指示器。 */
+  isTransferred?: boolean;
   onFeedback?: (messageId: string, rating: -1 | 1) => Promise<void> | void;
 }
 
@@ -16,10 +18,12 @@ export function MessageList({
   streamingTokens,
   isLoading,
   endRef,
+  isTransferred = false,
   onFeedback,
 }: MessageListProps) {
   const isAILoading =
     !isLoading &&
+    !isTransferred &&
     messages.length > 0 &&
     messages[messages.length - 1]?.role === "user" &&
     !streamingTokens;
@@ -55,6 +59,11 @@ export function MessageList({
           sources={message.sources?.sources ?? null}
           messageId={message.role === "assistant" ? message.id : undefined}
           feedback={message.feedback ?? null}
+          verification={message.verification ?? message.extra?.verification ?? null}
+          answerConfidence={
+            message.answer_confidence ?? message.extra?.answer_confidence ?? null
+          }
+          staffName={message.staff_name ?? null}
           onFeedback={onFeedback}
         />
       ))}

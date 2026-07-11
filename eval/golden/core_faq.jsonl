@@ -1,0 +1,13 @@
+{"id": "faq-invoice-001", "question": "怎么开发票?", "kind": "answerable", "expected_doc_ids": ["corpus:invoicing"], "expected_answer_evidence": ["电子发票", "订单详情页"], "notes": "eval/corpus/invoicing.md"}
+{"id": "faq-invoice-002", "question": "增值税专用发票需要提供什么信息?", "kind": "answerable", "expected_doc_ids": ["corpus:invoicing"], "expected_answer_evidence": ["纳税人识别号", "企业"], "notes": "eval/corpus/invoicing.md"}
+{"id": "faq-invoice-003", "question": "发票开错抬头还能换吗?", "kind": "answerable", "expected_doc_ids": ["corpus:invoicing"], "expected_answer_evidence": ["90 天", "换开"], "notes": "eval/corpus/invoicing.md"}
+{"id": "faq-shipping-001", "question": "订单多久能发货?", "kind": "answerable", "expected_doc_ids": ["corpus:shipping"], "expected_answer_evidence": ["24 小时"], "notes": "eval/corpus/shipping.md"}
+{"id": "faq-shipping-002", "question": "多少钱包邮?", "kind": "answerable", "expected_doc_ids": ["corpus:shipping"], "expected_answer_evidence": ["99"], "notes": "eval/corpus/shipping.md"}
+{"id": "faq-shipping-003", "question": "怎么查物流单号?", "kind": "answerable", "expected_doc_ids": ["corpus:shipping"], "expected_answer_evidence": ["我的订单"], "notes": "eval/corpus/shipping.md"}
+{"id": "faq-returns-001", "question": "七天无理由退货怎么申请?", "kind": "answerable", "expected_doc_ids": ["corpus:returns"], "expected_answer_evidence": ["申请售后", "7 天"], "notes": "eval/corpus/returns.md"}
+{"id": "faq-returns-002", "question": "退款多久到账?", "kind": "answerable", "expected_doc_ids": ["corpus:returns"], "expected_answer_evidence": ["工作日"], "notes": "eval/corpus/returns.md"}
+{"id": "faq-returns-003", "question": "质量问题换货运费谁出?", "kind": "answerable", "expected_doc_ids": ["corpus:returns"], "expected_answer_evidence": ["商家承担"], "notes": "eval/corpus/returns.md"}
+{"id": "faq-account-001", "question": "忘记密码怎么办?", "kind": "answerable", "expected_doc_ids": ["corpus:account"], "expected_answer_evidence": ["验证码", "重置"], "notes": "eval/corpus/account.md"}
+{"id": "faq-account-002", "question": "怎么更换绑定的手机号?", "kind": "answerable", "expected_doc_ids": ["corpus:account"], "expected_answer_evidence": ["安全中心"], "notes": "eval/corpus/account.md"}
+{"id": "faq-warranty-001", "question": "产品保修期是多久?", "kind": "answerable", "expected_doc_ids": ["corpus:warranty"], "expected_answer_evidence": ["12 个月"], "notes": "eval/corpus/warranty.md"}
+{"id": "faq-warranty-002", "question": "进水损坏在保修范围内吗?", "kind": "answerable", "expected_doc_ids": ["corpus:warranty"], "expected_answer_evidence": ["人为损坏"], "notes": "eval/corpus/warranty.md"}

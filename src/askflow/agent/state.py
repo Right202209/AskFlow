@@ -18,6 +18,8 @@ class AgentState:
     ticket_id: str | None = None
     ticket_data: dict[str, Any] | None = None
     tool_result: dict[str, Any] | None = None
+    # 挂起的工具槽位记录（agent/slots.py），由 chat 层从 conversations.metadata 读入。
+    pending_tool: dict[str, Any] | None = None
     error: str | None = None
     should_handoff: bool = False
     needs_clarification: bool = False

@@ -21,6 +21,12 @@ logger = get_logger(__name__)
 # 老规则 [A-Za-z0-9]{6,} 会把 "PRODUCT001" / "abcdef" / "hello123" 全部当成订单号。
 ORDER_ID_PATTERN = re.compile(r"\b[A-Z]{2,4}\d{6,}\b")
 
+# 订单号缺失时的追问文案；配合 needs_slot 让 tool_node 记档、下一轮免分类续跑。
+ORDER_SLOT_ASK_COPY = (
+    "抱歉，没能从您的问题里识别出订单号。"
+    "请提供形如 'AB12345678' 的订单号（两到四个大写字母 + 至少六位数字）。"
+)
+
 _MOCK_ORDER_RESPONSE = {
     "status": "shipped",
     "tracking": "SF1234567890",
@@ -202,8 +208,8 @@ async def execute_tool(
 ) -> dict[str, Any]:
     """根据意图标签执行对应的业务工具。
 
-    目前通过 ``ORDER_ID_PATTERN`` 从 question 中提取参数；未识别到订单号
-    时直接返回引导文案，由 LLM/前端按需 follow-up。
+    通过 ``ORDER_ID_PATTERN`` 从 question 中提取参数；未识别到订单号时返回
+    追问文案 + ``needs_slot``，由 tool_node 持久化挂起记录、下一轮免分类续跑。
     """
     mapped = _INTENT_TOOL_MAP.get(tool_name)
     handler = TOOLS.get(mapped) if mapped else None
@@ -221,13 +227,15 @@ async def execute_tool(
     if mapped == "search_order":
         match = ORDER_ID_PATTERN.search(question)
         if not match:
+            # 槽位缺失不再是死胡同：返回 needs_slot 让 tool_node 记档，
+            # 下一轮用户补号时由 agent/slots.py 免分类续跑（plan agent-real-handoff/01）。
+            from askflow.agent.slots import SLOT_ORDER_ID
+
             return {
-                "display": (
-                    "抱歉，没能从您的问题里识别出订单号。"
-                    "请提供形如 'AB12345678' 的订单号（两到四个大写字母 + 至少六位数字）。"
-                ),
+                "display": ORDER_SLOT_ASK_COPY,
                 "tool": mapped,
                 "raw": None,
+                "needs_slot": SLOT_ORDER_ID,
             }
         order_id = match.group(0)
         raw = await handler(order_id)

@@ -1,7 +1,9 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from askflow.agent.handoff import HANDOFF_SWEEP_INTERVAL_S, sweep_expired_handoffs
 from askflow.agent.service import (
     build_agent_service,
     dispose_agent_service,
@@ -10,12 +12,15 @@ from askflow.agent.service import (
     stop_route_map_subscriber,
 )
 from askflow.agent.tools import close_http_client, init_http_client
+from askflow.chat.push import start_chat_push_subscriber, stop_chat_push_subscriber
 from askflow.config import settings
 from askflow.core.database import engine
 from askflow.core.exceptions import register_exception_handlers
 from askflow.core.logging import get_logger
 from askflow.core.middleware import setup_middleware
+from askflow.core.prompts import prompt_cache
 from askflow.core.redis import redis_client
+from askflow.embedding.index_worker import start_index_consumer, stop_index_consumer
 from askflow.rag.bm25 import bm25_index
 from askflow.rag.llm_client import llm_client
 from askflow.rag.vector_store import get_vector_store
@@ -23,6 +28,36 @@ from askflow.rag.vector_store import get_vector_store
 DEFAULT_SECRET_KEY = "change-me-to-a-random-secret-key"
 
 logger = get_logger(__name__)
+
+_handoff_sweep_task: asyncio.Task | None = None
+
+
+async def _handoff_sweep_loop() -> None:
+    """周期清扫超时未认领的 handoff（升级工单 + 通知）；单轮失败不结束循环。"""
+    while True:
+        await asyncio.sleep(HANDOFF_SWEEP_INTERVAL_S)
+        try:
+            await sweep_expired_handoffs()
+        except Exception as exc:
+            logger.warning("handoff_sweep_failed", error=str(exc))
+
+
+def _start_handoff_sweep() -> None:
+    global _handoff_sweep_task
+    if _handoff_sweep_task is None or _handoff_sweep_task.done():
+        _handoff_sweep_task = asyncio.create_task(_handoff_sweep_loop())
+
+
+async def _stop_handoff_sweep() -> None:
+    global _handoff_sweep_task
+    task = _handoff_sweep_task
+    _handoff_sweep_task = None
+    if task and not task.done():
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
 
 def _assert_production_safe_settings() -> None:
@@ -71,8 +106,15 @@ async def lifespan(app: FastAPI):
     _warm_bm25_index()
     # 跨 worker 路由失效广播——subscriber 必须在 Redis 初始化之后启动。
     start_route_map_subscriber()
+    # 提示词模板热更新广播（同一 ConfigCache 机制），随 Redis 一起拉起。
+    prompt_cache.start_subscriber()
+    # 跨 worker 用户推送桥（客服回复/接管状态）+ handoff 超时清扫。
+    start_chat_push_subscriber()
+    _start_handoff_sweep()
     # 业务工具 httpx 单例——search_order 等异步工具复用同一份连接池。
     init_http_client()
+    # Redis 队列消费者：启动先重排 pending / stale indexing，再进入 BRPOP 循环。
+    await start_index_consumer()
 
     # 应用启动期一次性装配 AgentService（embedder / vector_store / retriever /
     # reranker / RAG / IntentClassifier / AgentGraph），避免每条用户消息都重建整条栈。
@@ -83,6 +125,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await stop_index_consumer()
+        await _stop_handoff_sweep()
+        await stop_chat_push_subscriber()
+        await prompt_cache.stop_subscriber()
         await stop_route_map_subscriber()
         await close_http_client()
         dispose_agent_service()
@@ -108,6 +154,11 @@ def create_app() -> FastAPI:
     from askflow.agent.router import router as agent_router
     from askflow.ticket.router import router as ticket_router
     from askflow.admin.router import router as admin_router
+    from askflow.admin.handoff_router import router as handoff_router
+    from askflow.admin.prompt_router import router as prompt_router
+    from askflow.admin.audit_router import router as audit_router
+    from askflow.knowledge.router import router as knowledge_gaps_router
+    from askflow.knowledge.router_drafts import router as knowledge_drafts_router
     from askflow.core.metrics import router as metrics_router
 
     # 业务接口统一挂在版本化前缀下，指标接口保持顶层，便于采集。
@@ -117,6 +168,11 @@ def create_app() -> FastAPI:
     app.include_router(agent_router, prefix="/api/v1/agent", tags=["Agent"])
     app.include_router(ticket_router, prefix="/api/v1/tickets", tags=["Tickets"])
     app.include_router(admin_router, prefix="/api/v1/admin", tags=["Admin"])
+    app.include_router(handoff_router, prefix="/api/v1/admin/handoffs", tags=["Handoff"])
+    app.include_router(prompt_router, prefix="/api/v1/admin/prompts", tags=["Prompts"])
+    app.include_router(audit_router, prefix="/api/v1/admin/audit-logs", tags=["Audit"])
+    app.include_router(knowledge_gaps_router, prefix="/api/v1/admin/gaps", tags=["Knowledge"])
+    app.include_router(knowledge_drafts_router, prefix="/api/v1/admin/drafts", tags=["Knowledge"])
     app.include_router(metrics_router, tags=["Metrics"])
 
     @app.get("/", include_in_schema=False)

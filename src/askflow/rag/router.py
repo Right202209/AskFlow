@@ -42,6 +42,9 @@ class RAGQuery(BaseModel):
 class RAGAnswer(BaseModel):
     answer: str
     sources: list[dict]
+    # 检索证据强度（plan-docs/honest-rag/01）：grounded=False 表示答案是确定性拒答文案。
+    grounded: bool | None = None
+    confidence: float | None = None
 
 
 def get_rag_service() -> RAGService:
@@ -77,4 +80,12 @@ async def rag_query(
         top_k=body.top_k,
         filters=_to_retrieval_filters(body.filters),
     )
-    return APIResponse(data=RAGAnswer(answer=result.answer, sources=result.sources))
+    grounding = result.grounding
+    return APIResponse(
+        data=RAGAnswer(
+            answer=result.answer,
+            sources=result.sources,
+            grounded=grounding.grounded if grounding else None,
+            confidence=grounding.confidence if grounding else None,
+        )
+    )

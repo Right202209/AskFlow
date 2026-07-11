@@ -6,6 +6,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.core.auth import get_current_user
+from askflow.core.audit import (
+    ACTION_TICKET_STATUS_CHANGE,
+    ENTITY_TICKET,
+    AuditContext,
+    record_audit,
+)
 from askflow.core.database import get_db
 from askflow.core.exceptions import NotFoundError
 from askflow.models.ticket import TicketPriority, TicketStatus
@@ -88,6 +94,16 @@ async def update_ticket(
     if not ticket:
         raise NotFoundError("Ticket not found")
     if "status" in updates and ticket.status != previous_status:
+        await record_audit(
+            db,
+            AuditContext(
+                actor=user,
+                action=ACTION_TICKET_STATUS_CHANGE,
+                entity_type=ENTITY_TICKET,
+                entity_id=ticket.id,
+                detail={"from": previous_status.value, "to": ticket.status.value},
+            ),
+        )
         await notify_ticket_update(
             user_id=str(ticket.user_id),
             ticket_id=str(ticket.id),

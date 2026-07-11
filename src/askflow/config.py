@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     # Ticket SLA——pending/processing 工单超过该时长记为 SLA 超时,运营 dashboard 据此告警。
     ticket_sla_hours: int = 24
 
+    # Handoff——queued 超过该分钟数未被认领即超时升级为工单（plan agent-real-handoff/02 §7）。
+    handoff_pickup_timeout_min: int = 10
+
+    # PII 脱敏（ops-platform/02，D5）。日志脱敏默认开；存量消息脱敏默认关——
+    # 脱敏存档会降级 handoff 摘要质量，是运营取舍（见 Slice 04 部署清单）。
+    log_masking_enabled: bool = True
+    mask_stored_messages: bool = False
+
     # CORS
     cors_origins: list[str] = ["http://localhost:5173"]
 

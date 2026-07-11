@@ -151,9 +151,7 @@ async def get_ticket_dashboard(db: AsyncSession) -> TicketDashboardResponse:
     open_filter = Ticket.status.in_([TicketStatus.pending, TicketStatus.processing])
     priority_rows = (
         await db.execute(
-            select(Ticket.priority, func.count())
-            .where(open_filter)
-            .group_by(Ticket.priority)
+            select(Ticket.priority, func.count()).where(open_filter).group_by(Ticket.priority)
         )
     ).all()
     open_by_priority = {p.value: c for p, c in priority_rows}
@@ -171,9 +169,7 @@ async def get_ticket_dashboard(db: AsyncSession) -> TicketDashboardResponse:
     breach_total = sla_row.breach or 0
 
     oldest_open_row = (
-        await db.execute(
-            select(func.min(Ticket.created_at)).where(open_filter)
-        )
+        await db.execute(select(func.min(Ticket.created_at)).where(open_filter))
     ).scalar()
     if oldest_open_row is not None:
         # SQLAlchemy 取出来已是 timezone-aware(列定义 DateTime(timezone=True));

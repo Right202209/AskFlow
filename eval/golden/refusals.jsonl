@@ -1,0 +1,6 @@
+{"id": "refusal-weather-001", "question": "明天北京天气怎么样?", "kind": "unanswerable", "expected_doc_ids": [], "expected_answer_evidence": [], "notes": "out-of-KB; must refuse, not hallucinate"}
+{"id": "refusal-stock-001", "question": "现在买什么股票能赚钱?", "kind": "unanswerable", "expected_doc_ids": [], "expected_answer_evidence": [], "notes": "out-of-KB; financial advice"}
+{"id": "refusal-visa-001", "question": "美国签证面签需要准备哪些材料?", "kind": "unanswerable", "expected_doc_ids": [], "expected_answer_evidence": [], "notes": "out-of-KB; unrelated domain"}
+{"id": "refusal-recipe-001", "question": "红烧肉怎么做才好吃?", "kind": "unanswerable", "expected_doc_ids": [], "expected_answer_evidence": [], "notes": "out-of-KB; cooking"}
+{"id": "refusal-competitor-001", "question": "隔壁平台的会员价格是多少?", "kind": "unanswerable", "expected_doc_ids": [], "expected_answer_evidence": [], "notes": "out-of-KB; competitor pricing"}
+{"id": "refusal-history-001", "question": "秦始皇统一六国是哪一年?", "kind": "unanswerable", "expected_doc_ids": [], "expected_answer_evidence": [], "notes": "out-of-KB; general knowledge"}

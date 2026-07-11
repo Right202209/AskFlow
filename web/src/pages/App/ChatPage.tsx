@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { Headphones } from "lucide-react";
 import { ChatComposer } from "@/components/chat/ChatComposer";
 import { ChatInfoPanel } from "@/components/chat/ChatInfoPanel";
 import { ConversationList } from "@/components/chat/ConversationList";
@@ -8,7 +9,32 @@ import { MessageList } from "@/components/chat/MessageList";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useChatStore } from "@/stores/chatStore";
 import { toastError, toastSuccess } from "@/stores/toastStore";
+import type { HandoffStatus } from "@/types/chat";
 import type { Ticket } from "@/types/ticket";
+
+/** 人工接管横幅文案与配色（handoff / handoff_update 帧驱动）。 */
+const HANDOFF_BANNERS: Record<HandoffStatus, { text: string; className: string }> = {
+  queued: {
+    text: "已转接人工客服，正在等待客服认领，你可以继续留言。",
+    className: "border-amber-200 bg-amber-50 text-amber-800",
+  },
+  claimed: {
+    text: "人工客服已接入，请直接在下方输入与客服沟通。",
+    className: "border-blue-200 bg-blue-50 text-blue-800",
+  },
+  resolved: {
+    text: "人工服务已结束，感谢你的耐心等待。",
+    className: "border-green-200 bg-green-50 text-green-800",
+  },
+  returned: {
+    text: "客服已将会话交还 AI，你可以继续提问。",
+    className: "border-teal-200 bg-teal-50 text-teal-800",
+  },
+  timed_out: {
+    text: "客服暂时无人接入，已自动创建高优先级工单跟进，AI 已恢复应答。",
+    className: "border-red-200 bg-red-50 text-red-800",
+  },
+};
 
 export function ChatPage() {
   const { conversationId } = useParams();
@@ -23,6 +49,8 @@ export function ChatPage() {
     isStreaming,
     intent,
     sources,
+    handoffStatus,
+    handoffTicketId,
     isLoadingConversations,
     isLoadingMessages,
     fetchConversations,
@@ -163,6 +191,12 @@ export function ChatPage() {
   const currentConversation =
     conversations.find((conversation) => conversation.id === currentConversationId) ?? null;
   const canCreateTicket = Boolean(currentConversationId && currentMessages.length > 0);
+  // 横幅优先用实时帧状态；刷新后回退到会话本身的 transferred 状态（视作排队中）。
+  const effectiveHandoffStatus: HandoffStatus | null =
+    handoffStatus ?? (currentConversation?.status === "transferred" ? "queued" : null);
+  const handoffBanner = effectiveHandoffStatus ? HANDOFF_BANNERS[effectiveHandoffStatus] : null;
+  const isHumanTakeover =
+    effectiveHandoffStatus === "queued" || effectiveHandoffStatus === "claimed";
   const connectionHint =
     connectionState === "connecting"
       ? "正在连接聊天服务，连接完成后才能发送消息。"
@@ -194,6 +228,7 @@ export function ChatPage() {
               streamingTokens={streamingTokens}
               isLoading={isLoadingMessages}
               endRef={messagesEndRef}
+              isTransferred={isHumanTakeover}
               onFeedback={async (messageId, rating) => {
                 if (!currentConversationId) return;
                 try {
@@ -205,6 +240,24 @@ export function ChatPage() {
               }}
             />
           </div>
+
+          {handoffBanner && (
+            <div
+              className={`flex items-center gap-2 border-t px-4 py-2.5 text-sm ${handoffBanner.className}`}
+            >
+              <Headphones className="h-4 w-4 shrink-0" />
+              <span>{handoffBanner.text}</span>
+              {effectiveHandoffStatus === "timed_out" && handoffTicketId && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/app/tickets/${handoffTicketId}`)}
+                  className="underline underline-offset-2 hover:opacity-80"
+                >
+                  查看工单
+                </button>
+              )}
+            </div>
+          )}
 
           <ChatComposer
             input={input}

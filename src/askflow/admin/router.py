@@ -7,6 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.admin.analytics import get_analytics, get_ticket_dashboard
 from askflow.admin.service import AdminService
+from askflow.core.audit import (
+    ACTION_DOCUMENT_DELETE,
+    ACTION_INTENT_CREATE,
+    ACTION_INTENT_DELETE,
+    ACTION_INTENT_UPDATE,
+    ENTITY_DOCUMENT,
+    ENTITY_INTENT_CONFIG,
+    AuditContext,
+    record_audit,
+)
 from askflow.core.auth import get_current_user, require_role
 from askflow.core.database import get_db
 from askflow.core.security import create_access_token, hash_password, verify_password
@@ -82,6 +92,15 @@ async def delete_document(
 
     embed_service = EmbeddingService(create_embedder(), get_vector_store())
     await embed_service.delete_document(str(doc_id))
+    await record_audit(
+        db,
+        AuditContext(
+            actor=user,
+            action=ACTION_DOCUMENT_DELETE,
+            entity_type=ENTITY_DOCUMENT,
+            entity_id=doc_id,
+        ),
+    )
     return APIResponse(data={"deleted": True})
 
 
@@ -103,6 +122,16 @@ async def create_intent(
 ):
     service = AdminService(db)
     config = await service.create_intent_config(**body.model_dump())
+    await record_audit(
+        db,
+        AuditContext(
+            actor=user,
+            action=ACTION_INTENT_CREATE,
+            entity_type=ENTITY_INTENT_CONFIG,
+            entity_id=config.id,
+            detail=body.model_dump(mode="json"),
+        ),
+    )
     return APIResponse(data=IntentConfigResponse.model_validate(config))
 
 
@@ -117,6 +146,16 @@ async def update_intent(
     config = await service.update_intent_config(config_id, **body.model_dump(exclude_unset=True))
     if not config:
         return APIResponse(success=False, error="Intent config not found")
+    await record_audit(
+        db,
+        AuditContext(
+            actor=user,
+            action=ACTION_INTENT_UPDATE,
+            entity_type=ENTITY_INTENT_CONFIG,
+            entity_id=config_id,
+            detail=body.model_dump(mode="json", exclude_unset=True),
+        ),
+    )
     return APIResponse(data=IntentConfigResponse.model_validate(config))
 
 
@@ -130,6 +169,15 @@ async def delete_intent(
     deleted = await service.delete_intent_config(config_id)
     if not deleted:
         return APIResponse(success=False, error="Intent config not found")
+    await record_audit(
+        db,
+        AuditContext(
+            actor=user,
+            action=ACTION_INTENT_DELETE,
+            entity_type=ENTITY_INTENT_CONFIG,
+            entity_id=config_id,
+        ),
+    )
     return APIResponse(data={"deleted": True})
 
 

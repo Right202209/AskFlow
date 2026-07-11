@@ -22,5 +22,7 @@ class DocumentResponse(BaseModel):
     tags: dict | None
     created_at: datetime
     indexed_at: datetime | None
+    index_error: str | None = None
+    index_started_at: datetime | None = None
 
     model_config = {"from_attributes": True}

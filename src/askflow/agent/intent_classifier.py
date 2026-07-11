@@ -5,6 +5,7 @@ import re
 
 from askflow.core.logging import get_logger
 from askflow.core.metrics import INTENT_CLASSIFICATION_COUNT
+from askflow.core.prompts import PROMPT_KEY_INTENT_CLASSIFIER, get_prompt
 from askflow.rag.llm_client import LLMClient
 from askflow.schemas.intent import IntentResult
 
@@ -12,6 +13,8 @@ logger = get_logger(__name__)
 
 DEFAULT_INTENT = "faq"
 
+# 代码兜底默认值：运行时优先读 DB 模板（core/prompts.py，键 intent.classifier）。
+# 六意图词表是 AGENTS.md §1 的契约——DB 侧编辑删掉标签会改变分类行为，管理端有提示。
 INTENT_PROMPT = """You are an intent classifier for a customer service system. Classify the user's message into one of the following intents:
 
 - faq: General knowledge questions, FAQ inquiries
@@ -110,7 +113,8 @@ class IntentClassifier:
         return None
 
     async def _model_classify(self, message: str) -> IntentResult:
-        prompt = INTENT_PROMPT.format(message=message)
+        prompt_template = await get_prompt(PROMPT_KEY_INTENT_CLASSIFIER)
+        prompt = prompt_template.format(message=message)
         response = await self._llm.chat(
             [{"role": "user", "content": prompt}],
             temperature=0.1,
