@@ -9,6 +9,10 @@ from prometheus_client import (
     generate_latest,
 )
 
+# 多进程诚实性（Slice 04，D8）：本 registry 是 per-process 的。用 `--workers N` 起多进程时，
+# /metrics 只返回被抓到的那个 worker 的计数；跨 worker 聚合需 prometheus_client 的 multiprocess
+# 模式（设 PROMETHEUS_MULTIPROC_DIR）。单 worker 是本参考实现默认拓扑，故此处不默认开启多进程
+# 模式，只在 docs/deployment/CHECKLIST.md 记录该限制与开启方式。
 registry = CollectorRegistry()
 
 REQUEST_COUNT = Counter(
@@ -74,6 +78,42 @@ HANDOFF_TIMEOUT_COUNT = Counter(
 WS_CONNECTIONS = Gauge(
     "askflow_ws_connections_active",
     "Active WebSocket connections",
+    registry=registry,
+)
+
+# 以下为 Slice 04 新增运维指标：异步索引作业、上游 LLM/embedding 失败、审计事件、构建信息。
+DOCUMENT_INDEX_JOBS = Counter(
+    "askflow_document_index_jobs_total",
+    "Async document index jobs by kind and outcome",
+    ["kind", "outcome"],
+    registry=registry,
+)
+
+DOCUMENT_INDEX_DURATION = Histogram(
+    "askflow_document_index_duration_seconds",
+    "Async document index job duration in seconds",
+    registry=registry,
+)
+
+LLM_REQUEST_FAILURES = Counter(
+    "askflow_llm_request_failures_total",
+    "Upstream LLM/embedding request failures by operation",
+    ["operation"],
+    registry=registry,
+)
+
+AUDIT_EVENTS = Counter(
+    "askflow_audit_events_total",
+    "Admin audit events recorded by action",
+    ["action"],
+    registry=registry,
+)
+
+# 值恒为 1，元数据挂在 label 上——单次在 lifespan 里 set()，用于确认线上跑的版本/harness 策略。
+BUILD_INFO = Gauge(
+    "askflow_build_info",
+    "Static build info; value is always 1, labels carry version metadata",
+    ["version", "harness_policy"],
     registry=registry,
 )
 

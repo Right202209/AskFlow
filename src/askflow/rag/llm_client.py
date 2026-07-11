@@ -7,7 +7,7 @@ import httpx
 
 from askflow.config import settings
 from askflow.core.logging import get_logger
-from askflow.core.metrics import LLM_TOKEN_COUNT
+from askflow.core.metrics import LLM_REQUEST_FAILURES, LLM_TOKEN_COUNT
 
 logger = get_logger(__name__)
 
@@ -40,7 +40,11 @@ class LLMClient:
             json=body,
             headers={"Authorization": f"Bearer {self._api_key}"},
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception:
+            LLM_REQUEST_FAILURES.labels(operation="chat").inc()
+            raise
         data = response.json()
         content = data["choices"][0]["message"]["content"]
         if usage := data.get("usage"):
@@ -67,7 +71,11 @@ class LLMClient:
             json=body,
             headers={"Authorization": f"Bearer {self._api_key}"},
         ) as response:
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except Exception:
+                LLM_REQUEST_FAILURES.labels(operation="chat_stream").inc()
+                raise
             async for line in response.aiter_lines():
                 if not line.startswith("data: "):
                     continue

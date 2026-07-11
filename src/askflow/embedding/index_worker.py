@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from askflow.core.audit import (
 from askflow.core.database import async_session_factory
 from askflow.core.logging import get_logger
 from askflow.core.minio_client import delete_document_bytes, get_document_bytes
+from askflow.core.metrics import DOCUMENT_INDEX_DURATION, DOCUMENT_INDEX_JOBS
 from askflow.embedding.embedder import create_embedder
 from askflow.embedding.queue import (
     INDEX_JOB_KIND_REINDEX,
@@ -34,6 +36,9 @@ logger = get_logger(__name__)
 
 MAX_INDEX_ERROR_CHARS = 1000
 ORPHAN_REQUEUE_ERROR = "requeued after interrupted indexing"
+INDEX_OUTCOME_SUCCESS = "success"
+INDEX_OUTCOME_FAILURE = "failure"
+INDEX_OUTCOME_SKIPPED = "skipped"
 _index_consumer_task: asyncio.Task | None = None
 
 
@@ -165,11 +170,13 @@ async def _handle_failure(
 async def _process_job(job: IndexJob) -> None:
     doc = await _claim_job(job)
     if doc is None:
+        DOCUMENT_INDEX_JOBS.labels(kind=job.kind, outcome=INDEX_OUTCOME_SKIPPED).inc()
         logger.info("document_index_claim_skipped", doc_id=job.doc_id, kind=job.kind)
         return
 
     service: EmbeddingService | None = None
     storage_key = ""
+    started = time.perf_counter()
     try:
         storage_key = _storage_key(doc)
         service = EmbeddingService(create_embedder(), get_vector_store())
@@ -182,10 +189,14 @@ async def _process_job(job: IndexJob) -> None:
             source=doc.source,
         )
         await _finalize_success(job, chunk_count)
+        DOCUMENT_INDEX_JOBS.labels(kind=job.kind, outcome=INDEX_OUTCOME_SUCCESS).inc()
     except Exception as exc:
         await _handle_failure(
             job, doc, service=service, storage_key=storage_key, error=exc
         )
+        DOCUMENT_INDEX_JOBS.labels(kind=job.kind, outcome=INDEX_OUTCOME_FAILURE).inc()
+    finally:
+        DOCUMENT_INDEX_DURATION.observe(time.perf_counter() - started)
 
 
 async def index_queue_consumer() -> None:

@@ -1,5 +1,5 @@
 import { apiClient } from "./api";
-import type { AnalyticsData, TicketDashboardData } from "@/types/admin";
+import type { AnalyticsData, SystemHealthData, TicketDashboardData } from "@/types/admin";
 import type { Document } from "@/types/document";
 import type { HandoffDetail, HandoffSession, HandoffSessionStatus } from "@/types/handoff";
 import type { IntentConfig, CreateIntentRequest, UpdateIntentRequest } from "@/types/intent";
@@ -20,6 +20,10 @@ export async function getAnalytics(): Promise<AnalyticsData> {
 
 export async function getTicketDashboard(): Promise<TicketDashboardData> {
   return apiClient<TicketDashboardData>("/api/v1/admin/tickets/dashboard");
+}
+
+export async function getSystemHealth(): Promise<SystemHealthData> {
+  return apiClient<SystemHealthData>("/api/v1/admin/system/health");
 }
 
 export async function getIntents(): Promise<IntentConfig[]> {

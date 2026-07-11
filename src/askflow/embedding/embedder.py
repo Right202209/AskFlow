@@ -6,8 +6,11 @@ import httpx
 
 from askflow.config import settings
 from askflow.core.logging import get_logger
+from askflow.core.metrics import LLM_REQUEST_FAILURES
 
 logger = get_logger(__name__)
+
+EMBED_ERROR_BODY_CHARS = 300
 
 
 class EmbeddingProviderError(RuntimeError):
@@ -65,23 +68,37 @@ class APIEmbedder:
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as error:
-            body = error.response.text[:300].strip() or "<empty body>"
-            logger.error(
-                "embedding_api_http_error",
-                status_code=error.response.status_code,
-                body=body,
-            )
-            raise EmbeddingProviderError(
-                f"Embedding API request failed with status {error.response.status_code}: {body}"
-            ) from error
+            LLM_REQUEST_FAILURES.labels(operation="embed").inc()
+            raise self._http_status_error(error) from error
         except httpx.HTTPError as error:
+            LLM_REQUEST_FAILURES.labels(operation="embed").inc()
             logger.error("embedding_api_request_error", error=str(error))
             raise EmbeddingProviderError(f"Embedding API request failed: {error}") from error
 
         try:
-            data = response.json()
+            return self._parse_embeddings(self._read_json(response))
+        except EmbeddingProviderError:
+            LLM_REQUEST_FAILURES.labels(operation="embed").inc()
+            raise
+
+    @staticmethod
+    def _http_status_error(error: httpx.HTTPStatusError) -> EmbeddingProviderError:
+        body = error.response.text[:EMBED_ERROR_BODY_CHARS].strip() or "<empty body>"
+        logger.error(
+            "embedding_api_http_error",
+            status_code=error.response.status_code,
+            body=body,
+        )
+        return EmbeddingProviderError(
+            f"Embedding API request failed with status {error.response.status_code}: {body}"
+        )
+
+    @staticmethod
+    def _read_json(response: httpx.Response):
+        try:
+            return response.json()
         except ValueError as error:
-            body = response.text[:300].strip() or "<empty body>"
+            body = response.text[:EMBED_ERROR_BODY_CHARS].strip() or "<empty body>"
             logger.error(
                 "embedding_api_invalid_json",
                 status_code=response.status_code,
@@ -91,6 +108,8 @@ class APIEmbedder:
                 f"Embedding API returned invalid JSON response: {body}"
             ) from error
 
+    @staticmethod
+    def _parse_embeddings(data) -> list[list[float]]:
         items = None
         if isinstance(data, dict):
             if isinstance(data.get("data"), list):
@@ -102,29 +121,29 @@ class APIEmbedder:
             raise EmbeddingProviderError("Embedding API response missing data field")
 
         try:
-            normalized: list[tuple[int, list[float]]] = []
-            for fallback_index, item in enumerate(items):
-                if not isinstance(item, dict):
-                    raise TypeError("Embedding item must be an object")
-
-                raw_embedding = item.get("embedding")
-                if raw_embedding is None:
-                    raw_embedding = item.get("values")
-                if not isinstance(raw_embedding, list):
-                    raise KeyError("embedding")
-
-                raw_index = item.get("index", fallback_index)
-                if not isinstance(raw_index, int):
-                    raise TypeError("Embedding index must be an integer")
-
-                normalized.append((raw_index, [float(value) for value in raw_embedding]))
-
+            normalized = [
+                APIEmbedder._normalize_item(item, index) for index, item in enumerate(items)
+            ]
             return [embedding for _, embedding in sorted(normalized, key=lambda x: x[0])]
         except (KeyError, TypeError, ValueError) as error:
             logger.error("embedding_api_invalid_payload", response=data)
             raise EmbeddingProviderError(
                 "Embedding API response has invalid embedding payload"
             ) from error
+
+    @staticmethod
+    def _normalize_item(item, fallback_index: int) -> tuple[int, list[float]]:
+        if not isinstance(item, dict):
+            raise TypeError("Embedding item must be an object")
+        raw_embedding = item.get("embedding")
+        if raw_embedding is None:
+            raw_embedding = item.get("values")
+        if not isinstance(raw_embedding, list):
+            raise KeyError("embedding")
+        raw_index = item.get("index", fallback_index)
+        if not isinstance(raw_index, int):
+            raise TypeError("Embedding index must be an integer")
+        return raw_index, [float(value) for value in raw_embedding]
 
     @property
     def dimension(self) -> int:

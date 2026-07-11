@@ -1,25 +1,64 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Upload, RefreshCw, Trash2 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Loader2, Upload, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useAdminStore } from "@/stores/adminStore";
 import { useAuthStore } from "@/stores/authStore";
 import { toastError, toastSuccess } from "@/stores/toastStore";
 import * as documentService from "@/services/document";
 import { cn } from "@/lib/utils";
-import type { DocumentStatus } from "@/types/document";
+import type { Document, DocumentStatus } from "@/types/document";
 
 const STATUS_LABELS: Record<DocumentStatus, string> = {
   pending: "等待中",
-  processing: "处理中",
-  indexed: "已索引",
+  indexing: "索引中",
+  active: "已索引",
   failed: "失败",
+  archived: "已归档",
 };
 
 const STATUS_COLORS: Record<DocumentStatus, string> = {
   pending: "bg-yellow-100 text-yellow-800",
-  processing: "bg-blue-100 text-blue-800",
-  indexed: "bg-green-100 text-green-800",
+  indexing: "bg-blue-100 text-blue-800",
+  active: "bg-green-100 text-green-800",
   failed: "bg-red-100 text-red-800",
+  archived: "bg-gray-100 text-gray-600",
 };
+
+const FILTER_OPTIONS = ["all", "pending", "indexing", "active", "failed", "archived"] as const;
+
+const POLL_INTERVAL_MS = 3000;
+const POLL_MAX_MINUTES = 30;
+const POLL_MAX_MS = POLL_MAX_MINUTES * 60 * 1000;
+
+const isInFlight = (doc: Document) => doc.status === "pending" || doc.status === "indexing";
+
+function StatusBadge({ doc }: { doc: Document }) {
+  return (
+    <span
+      className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[doc.status])}
+      title={doc.status === "failed" && doc.index_error ? doc.index_error : undefined}
+    >
+      {STATUS_LABELS[doc.status]}
+      {isInFlight(doc) && <Loader2 className="ml-1 inline h-3 w-3 animate-spin" />}
+    </span>
+  );
+}
+
+function usePollWhileIndexing(documents: Document[], refresh: () => Promise<void>) {
+  const pollStartRef = useRef<number | null>(null);
+  const hasInFlight = documents.some(isInFlight);
+
+  useEffect(() => {
+    if (!hasInFlight) {
+      pollStartRef.current = null;
+      return;
+    }
+    if (pollStartRef.current === null) pollStartRef.current = Date.now();
+    if (Date.now() - pollStartRef.current > POLL_MAX_MS) return;
+    const timer = setTimeout(() => refresh(), POLL_INTERVAL_MS);
+    return () => clearTimeout(timer);
+  }, [documents, hasInFlight, refresh]);
+}
 
 export function DocumentsPage() {
   const { documents, isLoading, error, fetchDocuments } = useAdminStore();
@@ -27,11 +66,20 @@ export function DocumentsPage() {
   const isAdmin = role === "admin";
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [statusFilter, setStatusFilter] = useState<DocumentStatus | "all">("all");
+  // System 面板的 failed 磁贴通过 ?status=failed 深链过来——初始过滤取自 URL，非法值回落 all。
+  const [searchParams] = useSearchParams();
+  const urlStatus = searchParams.get("status");
+  const initialFilter: DocumentStatus | "all" =
+    urlStatus && (FILTER_OPTIONS as readonly string[]).includes(urlStatus)
+      ? (urlStatus as DocumentStatus | "all")
+      : "all";
+  const [statusFilter, setStatusFilter] = useState<DocumentStatus | "all">(initialFilter);
 
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
+
+  usePollWhileIndexing(documents, fetchDocuments);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -43,7 +91,7 @@ export function DocumentsPage() {
       formData.append("title", file.name);
       await documentService.uploadDocument(formData);
       await fetchDocuments();
-      toastSuccess("文档上传成功", file.name);
+      toastSuccess("文档已上传，正在后台索引", file.name);
     } catch (error) {
       toastError(
         "上传失败",
@@ -55,11 +103,11 @@ export function DocumentsPage() {
     }
   };
 
-  const handleReindex = async (id: string) => {
+  const handleReindex = async (id: string, isRetry = false) => {
     try {
       await documentService.reindexDocument(id);
       await fetchDocuments();
-      toastSuccess("已触发重建索引");
+      toastSuccess(isRetry ? "已重新排队索引" : "已触发重建索引");
     } catch (error) {
       toastError(
         "重建索引失败",
@@ -117,7 +165,7 @@ export function DocumentsPage() {
 
       {/* Status filter */}
       <div className="flex gap-1">
-        {(["all", "pending", "processing", "indexed", "failed"] as const).map((s) => (
+        {FILTER_OPTIONS.map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
@@ -133,7 +181,7 @@ export function DocumentsPage() {
         ))}
       </div>
 
-      {isLoading ? (
+      {isLoading && documents.length === 0 ? (
         <div className="flex justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -156,11 +204,9 @@ export function DocumentsPage() {
               {filtered.map((doc) => (
                 <tr key={doc.id} className="border-b transition-colors hover:bg-muted/50">
                   <td className="px-4 py-3 font-medium">{doc.title}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{doc.filename}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{doc.file_path}</td>
                   <td className="px-4 py-3">
-                    <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[doc.status])}>
-                      {STATUS_LABELS[doc.status]}
-                    </span>
+                    <StatusBadge doc={doc} />
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{doc.chunk_count}</td>
                   <td className="px-4 py-3 text-muted-foreground">
@@ -169,13 +215,25 @@ export function DocumentsPage() {
                   {isAdmin && (
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
-                        <button
-                          onClick={() => handleReindex(doc.id)}
-                          className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                          title="重建索引"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        </button>
+                        {doc.status === "failed" ? (
+                          <button
+                            onClick={() => handleReindex(doc.id, true)}
+                            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-xs text-red-700 hover:bg-red-50"
+                            title={doc.index_error ?? "重试索引"}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            重试
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleReindex(doc.id)}
+                            disabled={isInFlight(doc)}
+                            className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                            title="重建索引"
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(doc.id)}
                           className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"

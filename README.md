@@ -13,7 +13,7 @@ AskFlow is an intelligent customer support system built around FastAPI, RAG, and
 - Infrastructure: Docker Compose stack for PostgreSQL, Redis, ChromaDB, and MinIO
 - Documentation: project docs in `docs/`, frontend-specific notes in `web/docs/`
 
-Project status and gaps are tracked in [docs/status/PROJECT_STATUS.md](docs/status/PROJECT_STATUS.md).
+Project status and gaps are tracked in [docs/status/STATUS.md](docs/status/STATUS.md). Production deployment is covered by [docs/deployment/CHECKLIST.md](docs/deployment/CHECKLIST.md).
 
 ## Architecture
 
@@ -46,12 +46,11 @@ FastAPI API
 - Ticket creation, updates, user-scoped listing, and admin/agent views
 - Document upload, indexing, reindexing, deletion, and MinIO-backed storage
 - Admin analytics, document management, and intent configuration endpoints
-- `/health` and `/metrics` endpoints for operational visibility
+- Deep `/health` (concurrent dependency checks) and `/metrics` endpoints, plus an admin **System** panel, for operational visibility
 
 ## Current Gaps
 
-- Prompt template CRUD and versioning are not implemented yet
-- Retrieval metadata filtering by source/time/tag is not implemented
+- Prompt template CRUD and versioning ship under `/api/v1/admin/prompts` (DB-backed, route-map cache pattern); retrieval metadata filtering by source/time is implemented (`rag/filters.py`), with `tags` reserved (logged and ignored — chunk metadata carries no tag field yet)
 - `order_query` ships with a pluggable webhook adapter; see [Plugging a real order service](#plugging-a-real-order-service)
 - No user-management API exists yet
 - Integration, E2E, and frontend automated tests are still missing

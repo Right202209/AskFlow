@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -50,3 +52,22 @@ class TicketDashboardResponse(BaseModel):
     oldest_open_age_hours: float | None = None
     # 最近 7 天每日创建 vs 已解决,反映吞吐与积压趋势。
     daily_trend: list[TicketTrendPoint] = []
+
+
+class SystemHealthResponse(BaseModel):
+    """Admin "System" 面板：依赖探活 + 文档积压 + 索引新鲜度 + 24h 审计 + 版本。"""
+
+    # 依赖整体状态与逐项结果——status=ok|degraded，checks[dep]=ok|error:<ClassName>。
+    status: str = "ok"
+    checks: dict[str, str] = {}
+    # 文档按状态计数（含 Slice 03 的 pending/indexing/failed 积压）+ 最老 pending 年龄。
+    documents_by_status: dict[str, int] = {}
+    oldest_pending_age_hours: float | None = None
+    # 索引新鲜度：active 文档分块总数 + 最近一次 indexed_at。
+    chunks_total: int = 0
+    last_indexed_at: datetime | None = None
+    # 最近 24h 审计事件按 action 计数（Slice 02 审计表）。
+    audit_events_24h: dict[str, int] = {}
+    # 线上跑的 harness 策略版本与应用版本——确认部署一致性。
+    harness_policy_version: str = ""
+    app_version: str = ""

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.core.masking import mask_dict
+from askflow.core.metrics import AUDIT_EVENTS
 from askflow.core.trace import get_trace_id
 from askflow.models.audit_log import AuditLog
 from askflow.models.user import User
@@ -63,3 +64,5 @@ async def record_audit(db: AsyncSession, ctx: AuditContext) -> None:
         trace_id=get_trace_id() or None,
     )
     db.add(row)
+    # 计数在 db.add 之后自增——极少数随主事务回滚的情况会轻微多计，对 Counter 可接受。
+    AUDIT_EVENTS.labels(action=ctx.action).inc()

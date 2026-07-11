@@ -4,6 +4,36 @@
 > Supersedes: `PROJECT_STATUS.md` (2026-04-17) / `STATUS_CHECK_2026-05-14.md` / `UNIMPLEMENTED_2026-05-14.md` / `TODO_TASKS_5_6.md`.
 > Outstanding work is tracked under [`.trellis/tasks/`](../../.trellis/tasks/) — see §6.
 
+## 0. 2026-07 Update — plan-docs initiatives landed
+
+> Added 2026-07-11. The four [`plan-docs/`](../../plan-docs/) initiatives shipped
+> as **business code (automated tests deferred)**; this addendum supersedes the
+> stale rows in §2/§5/§6 below wherever they conflict.
+
+- **honest-rag** (2026-07-09) — deterministic weak-retrieval refusal + grounding
+  trace, inline `[n]` citations backed by a post-answer evidence self-check, and
+  an answer-confidence badge in chat.
+- **knowledge-loop** (2026-07-09) — gap radar over refusal/low-score signals,
+  gap → staff-answered draft → reviewed publish through the document pipeline,
+  and an offline golden-set eval (`make eval`).
+- **agent-real-handoff** (2026-07-10) — multi-turn slot-filling tools + a warm
+  human handoff (summary → queue → staff inbox → return) with a timeout sweep,
+  replacing the old flag-and-forget.
+- **ops-platform** (2026-07-10/11) — DB-backed **prompt templates** with
+  versioned CRUD (route-map cache pattern reused); **audit log + PII masking**
+  (in-transaction `record_audit`, structlog masking processor); **asynchronous
+  document indexing** with visible `pending/indexing/active/failed` status (Redis
+  `BRPOP` queue + Postgres status-claim worker + startup orphan sweep); and a
+  **deployment checklist + health dashboards** (deep `/health`, new `askflow_*`
+  metrics, admin **System** panel).
+
+Migration head advanced to `20260711_01_document_index_status`. This closes the
+four P0 gaps in §1 (prompt CRUD, audit+PII, async index, KB backflow) and the
+handoff/observability risks in §5. **Still open:** automated tests for the new
+code (unit/integration/e2e deferred), a frontend test framework, and true
+multi-worker WS-cancel / `/metrics` aggregation (documented in
+[`docs/deployment/CHECKLIST.md`](../deployment/CHECKLIST.md), not enforced).
+
 ## 1. Executive Summary
 
 整体进度 **🟡 黄**：核心链路（Chat / RAG / Agent / Embedding / Ticket / Admin）已可端到端运行并通过单元 + 集成测试；2026-05-19 一致性审计沉淀的硬约束已分批落库；生产上线前仍有 14 项工作（见 §6）。

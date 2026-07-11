@@ -6,6 +6,9 @@
 - invalidate_route_map_cache + publish 链路（pub/sub 失败被吞，TTL 兜底）；
 - subscriber 收到消息会清本地缓存；
 - admin service 写入意图后会调用 invalidate + publish。
+
+ops-platform/01 D1 之后，缓存机制本体在 core/config_cache.py::ConfigCache，
+agent/service.py 只保留 route_map_cache 装配——测试改为对着实例与 config_cache 模块打桩。
 """
 
 from __future__ import annotations
@@ -16,13 +19,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import askflow.agent.service as agent_service_module
+import askflow.core.config_cache as config_cache_module
 from askflow.agent.service import (
     ROUTE_MAP_INVALIDATE_CHANNEL,
     _load_route_map,
-    _route_map_invalidate_listener,
     invalidate_route_map_cache,
     publish_route_map_invalidation,
+    route_map_cache,
 )
 
 
@@ -49,6 +52,12 @@ def _fake_async_session_factory(configs):
     return factory, repo
 
 
+def _prime_cache(value: dict[str, str], *, loaded_at: float = 0.0) -> None:
+    """直接给 ConfigCache 实例塞一份缓存，模拟最近一次 get() 的结果。"""
+    route_map_cache._value = value
+    route_map_cache._loaded_at = loaded_at
+
+
 class TestLoadRouteMap:
     @pytest.mark.asyncio
     async def test_cache_hit_skips_db(self, monkeypatch):
@@ -56,7 +65,6 @@ class TestLoadRouteMap:
         configs[0].name = "faq"
         configs[0].route_target = "rag"
         factory, repo = _fake_async_session_factory(configs)
-        monkeypatch.setattr(agent_service_module, "_load_route_map", _load_route_map)
         monkeypatch.setattr(
             "askflow.core.database.async_session_factory",
             factory,
@@ -65,6 +73,8 @@ class TestLoadRouteMap:
             "askflow.repositories.intent_config_repo.IntentConfigRepo",
             lambda db: repo,
         )
+        # 缓存命中判定用 time.monotonic()——固定时钟避免真实时间干扰。
+        monkeypatch.setattr(config_cache_module.time, "monotonic", lambda: 100.0)
 
         first = await _load_route_map()
         second = await _load_route_map()
@@ -90,10 +100,10 @@ class TestLoadRouteMap:
 
         # 让 monotonic 跳过 TTL。
         clock = [0.0]
-        monkeypatch.setattr(agent_service_module.time, "monotonic", lambda: clock[0])
+        monkeypatch.setattr(config_cache_module.time, "monotonic", lambda: clock[0])
 
         await _load_route_map()
-        clock[0] += agent_service_module.ROUTE_MAP_CACHE_TTL_SECONDS + 1
+        clock[0] += config_cache_module.CONFIG_CACHE_TTL_SECONDS + 1
         await _load_route_map()
 
         assert repo.get_all_active.await_count == 2
@@ -116,18 +126,21 @@ class TestLoadRouteMap:
         assert result == {}
 
 
+class FakeRedisClient:
+    def __init__(self, pool) -> None:
+        self._pool = pool
+
+    @property
+    def pool(self):
+        return self._pool
+
+
 class TestPubSubInvalidation:
     @pytest.mark.asyncio
     async def test_publish_swallows_redis_failure(self, monkeypatch):
         pool = MagicMock()
         pool.publish = AsyncMock(side_effect=RuntimeError("redis down"))
-
-        class FakeClient:
-            @property
-            def pool(self):
-                return pool
-
-        monkeypatch.setattr(agent_service_module, "redis_client", FakeClient())
+        monkeypatch.setattr(config_cache_module, "redis_client", FakeRedisClient(pool))
 
         # 不应抛出——TTL 兜底，业务流程不能被广播失败堵住。
         await publish_route_map_invalidation()
@@ -137,13 +150,8 @@ class TestPubSubInvalidation:
     async def test_publish_sends_invalidate_message(self, monkeypatch):
         pool = MagicMock()
         pool.publish = AsyncMock(return_value=1)
+        monkeypatch.setattr(config_cache_module, "redis_client", FakeRedisClient(pool))
 
-        class FakeClient:
-            @property
-            def pool(self):
-                return pool
-
-        monkeypatch.setattr(agent_service_module, "redis_client", FakeClient())
         await publish_route_map_invalidation()
 
         pool.publish.assert_awaited_once_with(ROUTE_MAP_INVALIDATE_CHANNEL, "invalidate")
@@ -174,19 +182,12 @@ class TestPubSubInvalidation:
         pubsub = FakePubSub()
         pool = MagicMock()
         pool.pubsub = MagicMock(return_value=pubsub)
-
-        class FakeClient:
-            @property
-            def pool(self):
-                return pool
-
-        monkeypatch.setattr(agent_service_module, "redis_client", FakeClient())
+        monkeypatch.setattr(config_cache_module, "redis_client", FakeRedisClient(pool))
 
         # 预先放一份缓存——expect subscriber clears it。
-        agent_service_module._route_map_cache = {"faq": "rag"}
-        agent_service_module._route_map_cache_at = 0.0
+        _prime_cache({"faq": "rag"})
 
-        task = asyncio.create_task(_route_map_invalidate_listener())
+        task = asyncio.create_task(route_map_cache._listener())
         # 让 listener 跑两个 yield。
         await asyncio.sleep(0)
         await asyncio.sleep(0)
@@ -197,7 +198,7 @@ class TestPubSubInvalidation:
         except asyncio.CancelledError:
             pass
 
-        assert agent_service_module._route_map_cache is None
+        assert route_map_cache.snapshot is None
 
 
 class TestAdminWritesPublish:
@@ -216,13 +217,13 @@ class TestAdminWritesPublish:
         monkeypatch.setattr(admin_module, "publish_route_map_invalidation", publish_spy)
 
         # 预先放一份缓存——expect invalidate clears it。
-        agent_service_module._route_map_cache = {"faq": "rag"}
+        _prime_cache({"faq": "rag"})
 
         svc = admin_module.AdminService(db=MagicMock())
         result = await svc.create_intent_config(name="faq", route_target="rag")
 
         assert result is created
-        assert agent_service_module._route_map_cache is None
+        assert route_map_cache.snapshot is None
         publish_spy.assert_awaited_once()
 
     @pytest.mark.asyncio

@@ -1,9 +1,10 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 
 from askflow.agent.handoff import HANDOFF_SWEEP_INTERVAL_S, sweep_expired_handoffs
+from askflow.agent.harness import CognitiveHarnessPolicy
 from askflow.agent.service import (
     build_agent_service,
     dispose_agent_service,
@@ -16,7 +17,9 @@ from askflow.chat.push import start_chat_push_subscriber, stop_chat_push_subscri
 from askflow.config import settings
 from askflow.core.database import engine
 from askflow.core.exceptions import register_exception_handlers
+from askflow.core.health import check_health
 from askflow.core.logging import get_logger
+from askflow.core.metrics import BUILD_INFO
 from askflow.core.middleware import setup_middleware
 from askflow.core.prompts import prompt_cache
 from askflow.core.redis import redis_client
@@ -24,6 +27,7 @@ from askflow.embedding.index_worker import start_index_consumer, stop_index_cons
 from askflow.rag.bm25 import bm25_index
 from askflow.rag.llm_client import llm_client
 from askflow.rag.vector_store import get_vector_store
+from askflow.version import APP_VERSION
 
 DEFAULT_SECRET_KEY = "change-me-to-a-random-secret-key"
 
@@ -122,6 +126,11 @@ async def lifespan(app: FastAPI):
     init_agent_service(agent_service)
     app.state.agent_service = agent_service
 
+    # 单次写入构建信息指标——确认线上跑的版本与 harness 策略（Slice 04，§Design 2）。
+    BUILD_INFO.labels(
+        version=APP_VERSION, harness_policy=CognitiveHarnessPolicy().version
+    ).set(1)
+
     try:
         yield
     finally:
@@ -141,7 +150,7 @@ def create_app() -> FastAPI:
     """创建 FastAPI 应用并挂载所有业务路由。"""
     app = FastAPI(
         title=settings.app_name,
-        version="0.1.0",
+        version=APP_VERSION,
         lifespan=lifespan,
     )
 
@@ -179,12 +188,16 @@ def create_app() -> FastAPI:
     async def index():
         return {
             "name": settings.app_name,
-            "version": "0.1.0",
+            "version": APP_VERSION,
             "docs": "/docs",
         }
 
     @app.get("/health")
-    async def health():
-        return {"status": "ok"}
+    async def health(response: Response):
+        """深度健康检查:并发探活 Postgres/Redis/Chroma/MinIO,任一失败返回 503。"""
+        report = await check_health()
+        if not report.ok:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return {"status": report.status, "checks": report.checks}
 
     return app

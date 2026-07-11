@@ -5,11 +5,14 @@
 - worker A（admin 写路径）调用 `AdminService.update_intent_config` 后，会发布 invalidate
   消息；
 - worker B（订阅路径）订阅同一个 channel 的后台 listener 在收到广播后清空本地
-  `_route_map_cache`，于是下一次 `_load_route_map()` 会重新打 DB 拿到新规则；
+  路由缓存，于是下一次 `_load_route_map()` 会重新打 DB 拿到新规则；
 - 单 worker 内：admin 写完后本地缓存立刻被清掉，下一次 `_load_route_map` 即生效。
 
 这条用例避免我们重复犯 Task 5B 之前的错——pubsub 广播看起来对了，
 实际却没能驱动另一个 worker 清缓存。
+
+ops-platform/01 D1 之后缓存本体在 core/config_cache.py::ConfigCache；
+redis 依赖也随之搬家，打桩对象改为 config_cache 模块与 route_map_cache 实例。
 """
 
 from __future__ import annotations
@@ -22,12 +25,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import askflow.admin.service as admin_module
-import askflow.agent.service as agent_service_module
+import askflow.core.config_cache as config_cache_module
 from askflow.agent.service import (
     ROUTE_MAP_INVALIDATE_CHANNEL,
     _load_route_map,
-    _route_map_invalidate_listener,
     invalidate_route_map_cache,
+    route_map_cache,
 )
 
 
@@ -108,7 +111,7 @@ def reset_route_cache():
 @pytest.fixture
 def fake_redis(monkeypatch) -> FakeRedisBroker:
     broker = FakeRedisBroker()
-    monkeypatch.setattr(agent_service_module, "redis_client", FakeRedisClient(broker))
+    monkeypatch.setattr(config_cache_module, "redis_client", FakeRedisClient(broker))
     return broker
 
 
@@ -131,6 +134,12 @@ def admin_service(monkeypatch, intent_repo):
     return admin_module.AdminService(db=MagicMock())
 
 
+def _prime_cache(value: dict[str, str], *, loaded_at: float = 0.0) -> None:
+    """给 route_map_cache 实例塞一份缓存，模拟 worker B 最近一次 get() 的结果。"""
+    route_map_cache._value = value
+    route_map_cache._loaded_at = loaded_at
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -143,11 +152,10 @@ class TestCrossWorkerInvalidation:
     ):
         """模拟两个 worker：A 改意图、B 后台订阅；B 收到广播必须清掉自己的本地缓存。"""
         # worker B 端：先放一份缓存（模拟它最近一次 _load_route_map 的结果）。
-        agent_service_module._route_map_cache = {"faq": "rag"}
-        agent_service_module._route_map_cache_at = 0.0
+        _prime_cache({"faq": "rag"})
 
         # worker B 端：启动后台订阅 listener。
-        listener_task = asyncio.create_task(_route_map_invalidate_listener())
+        listener_task = asyncio.create_task(route_map_cache._listener())
         # 让 listener 真正完成 subscribe（消费掉 subscribe 确认帧）。
         for _ in range(3):
             await asyncio.sleep(0)
@@ -161,11 +169,11 @@ class TestCrossWorkerInvalidation:
         # 等 listener 消费完 invalidate 消息。
         for _ in range(5):
             await asyncio.sleep(0)
-            if agent_service_module._route_map_cache is None:
+            if route_map_cache.snapshot is None:
                 break
 
         # worker B 的本地缓存被 pubsub 清掉了。
-        assert agent_service_module._route_map_cache is None
+        assert route_map_cache.snapshot is None
 
         listener_task.cancel()
         try:
@@ -178,12 +186,11 @@ class TestCrossWorkerInvalidation:
         self, admin_service, fake_redis
     ):
         """同 worker 内：写完不必等 pubsub，本地缓存先被 invalidate_route_map_cache 同步清掉。"""
-        agent_service_module._route_map_cache = {"faq": "rag"}
-        agent_service_module._route_map_cache_at = 12345.0
+        _prime_cache({"faq": "rag"}, loaded_at=12345.0)
 
         await admin_service.create_intent_config(name="fault", route_target="ticket")
 
-        assert agent_service_module._route_map_cache is None
+        assert route_map_cache.snapshot is None
 
     @pytest.mark.asyncio
     async def test_next_load_after_invalidation_hits_db_again(

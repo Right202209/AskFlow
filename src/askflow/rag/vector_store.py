@@ -79,6 +79,10 @@ class VectorStore:
     def count(self) -> int:
         return self._collection.count()
 
+    def heartbeat(self) -> int:
+        """探活 Chroma——返回服务端时钟纳秒；/health 依赖它判断向量库是否可达。"""
+        return self._client.heartbeat()
+
 
 _vector_store: VectorStore | None = None
 

@@ -36,3 +36,16 @@ export interface TicketDashboardData {
   oldest_open_age_hours: number | null;
   daily_trend: TicketTrendPoint[];
 }
+
+// Slice 04：System 面板。后端 /admin/system/health 返回结构。
+export interface SystemHealthData {
+  status: "ok" | "degraded";
+  checks: Record<string, string>;
+  documents_by_status: Record<string, number>;
+  oldest_pending_age_hours: number | null;
+  chunks_total: number;
+  last_indexed_at: string | null;
+  audit_events_24h: Record<string, number>;
+  harness_policy_version: string;
+  app_version: string;
+}

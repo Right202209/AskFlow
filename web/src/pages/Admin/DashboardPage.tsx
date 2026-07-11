@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Loader2, MessageSquare, FileText, Ticket, BookOpen } from "lucide-react";
 import { useAdminStore } from "@/stores/adminStore";
+import { SystemHealthPanel } from "@/components/admin/SystemHealthPanel";
 import {
   BarChart,
   Bar,
@@ -68,6 +69,9 @@ export function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-xl font-semibold">数据看板</h1>
+
+      {/* Slice 04：系统健康面板——依赖探活、文档积压、索引新鲜度、版本。 */}
+      <SystemHealthPanel />
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

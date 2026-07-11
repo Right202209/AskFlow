@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from askflow.admin.analytics import get_analytics, get_ticket_dashboard
 from askflow.admin.service import AdminService
+from askflow.admin.system_health import get_system_health
 from askflow.core.audit import (
     ACTION_DOCUMENT_DELETE,
     ACTION_INTENT_CREATE,
@@ -22,7 +23,7 @@ from askflow.core.database import get_db
 from askflow.core.security import create_access_token, hash_password, verify_password
 from askflow.models.user import User, UserRole
 from askflow.repositories.user_repo import UserRepo
-from askflow.schemas.admin import AnalyticsResponse, TicketDashboardResponse
+from askflow.schemas.admin import AnalyticsResponse, SystemHealthResponse, TicketDashboardResponse
 from askflow.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from askflow.schemas.common import APIResponse, PaginatedResponse
 from askflow.schemas.document import DocumentResponse
@@ -217,4 +218,14 @@ async def ticket_dashboard(
 ):
     """工单系统级看板:open 总数、SLA 超时、按优先级与最近 7 天进出趋势。"""
     data = await get_ticket_dashboard(db)
+    return APIResponse(data=data)
+
+
+@router.get("/system/health", response_model=APIResponse[SystemHealthResponse])
+async def system_health(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_role(UserRole.admin, UserRole.agent)),
+):
+    """System 面板:依赖探活 + 文档积压 + 索引新鲜度 + 24h 审计 + 版本。"""
+    data = await get_system_health(db)
     return APIResponse(data=data)
